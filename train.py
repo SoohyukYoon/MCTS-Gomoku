@@ -75,6 +75,16 @@ def train():
 		root = MCTSNode(board, black)
 		child = root
 		for turn in range(49):
+			print()
+			for i, ele in enumerate(board):  
+				if ele == 1: 
+					print('●', end=' ')
+				if ele == 2: 
+					print('○', end=' ')
+				if ele == '.':
+					print('.', end=' ')
+				if i % 7 == 6: 
+					print()
 
 			if current_player == 1:
 				loss_1 = True

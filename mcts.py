@@ -54,11 +54,11 @@ class MCTSNode:
 
 		# Apply penalty/reward 
 		if winner == 0:
-			child.wins += 0 
+			child.wins -= 0.5 
 		elif winner == child.color: 
-			child.wins += 1
+			child.wins += 2
 		else: 
-			child.wins -= 2
+			child.wins -= 1
 
 		# Increment number of visits
 		child.visits += 1
@@ -149,7 +149,7 @@ class MCTSNode:
 		# print("check_winner_for_state: ", action)
 		return MCTSNode(state,color,...,action).check_winner()
 
-	def backpropagate(self, winner, loss):
+	def backpropagate(self, winner, win, draw, loss):
 		"""Update stats up the tree."""
 		self.visits += 1
 		# self.wins += result
@@ -164,17 +164,17 @@ class MCTSNode:
 			node.visits  += 1 
 			player_at_parent = 3 - node.get_current_player()
 			if winner == player_at_parent: 
-				node.wins += 1 # / (i * 0.05) 
+				node.wins += win # / (i * 0.05) 
 			elif winner == 0.5: 
-				node.wins += 0
+				node.wins -= draw
 			else: 
 				if loss: 
-					node.wins -= 2
+					node.wins -= loss
 			node = node.parent
 			i += 1 
 
 # MCTS Search
-def mcts_search(root, color, loss, iterations=500):
+def mcts_search(root, color, win, draw, loss, iterations=500):
 	# root = MCTSNode(root_state, color)
 	i = 0 
 	for _ in range(iterations):
@@ -194,7 +194,7 @@ def mcts_search(root, color, loss, iterations=500):
 		winner = node.rollout()
 
 		# Backpropagation: Update the root node 
-		node.backpropagate(winner, loss)
+		node.backpropagate(winner, win, draw, loss)
 		i += 1 
 	root = root.best_child(c=0)
 
