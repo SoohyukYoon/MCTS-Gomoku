@@ -54,7 +54,7 @@ class MCTSNode:
 
 		# Apply penalty/reward 
 		if winner == 0:
-			child.wins += 0.5 
+			child.wins += 0 
 		elif winner == child.color: 
 			child.wins += 1
 		else: 
@@ -166,13 +166,14 @@ class MCTSNode:
 			if winner == player_at_parent: 
 				node.wins += 1 # / (i * 0.05) 
 			elif winner == 0.5: 
-				node.wins += 0.5
+				node.wins += 0
 			else: 
 				if loss: 
 					node.wins -= 2
 			node = node.parent
 			i += 1 
 
+# MCTS Search
 def mcts_search(root, color, loss, iterations=500):
 	# root = MCTSNode(root_state, color)
 	i = 0 
@@ -265,6 +266,7 @@ def combine_nodes_recursively(children):
 	for action, grandchildren in grandchildren_action_map.items(): 
 		merged_grandchild = combine_nodes_recursively(grandchildren)
 		merged_grandchild.parent = merged_child
+		merged_child.children.append(merged_grandchild)
 	
 	return merged_child
 

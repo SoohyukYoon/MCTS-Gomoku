@@ -46,10 +46,10 @@ def play():
 			if len(filenames) > 1: 
 				tree2 = load_game_tree(filenames[1].strip())
 				GameTree = combine_game_trees(GameTree, tree2)
+				save_game_tree(GameTree)
 	except ValueError:
 		print("Invalid file or File does not exist, please try again")
-	
-	save_game_tree(GameTree)
+	print(GameTree.visits)
 
 	print("___________________")
 	print("GAME: ")

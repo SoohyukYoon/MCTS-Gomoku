@@ -123,4 +123,3 @@ def train():
 	save_game_tree(GameTree)
 
 train()
-
