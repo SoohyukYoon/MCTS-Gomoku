@@ -131,6 +131,7 @@ class MCTSNode:
 		"""Play random moves until the game ends."""
 		state = self.state[:]
 		player = self.get_current_player()
+
 		while True:
 			actions = [i for i in range(49) if state[i] == '.']
 			if not actions: return 0.5  #Draw
@@ -174,8 +175,10 @@ class MCTSNode:
 
 def mcts_search(root, color, loss, iterations=500):
 	# root = MCTSNode(root_state, color)
-
+	i = 0 
 	for _ in range(iterations):
+		if i > 99998:
+			print("count: ", i)
 		node = root
 
 		# Selection
@@ -191,7 +194,82 @@ def mcts_search(root, color, loss, iterations=500):
 
 		# Backpropagation: Update the root node 
 		node.backpropagate(winner, loss)
+		i += 1 
 	root = root.best_child(c=0)
 
 	#root.parent = None
 	return root  # Return best move
+
+# Combines two Game Trees resulted from training
+def combine_game_trees(tree1, tree2):
+	# Initialize resulting tree
+	empty_board = ['.'] * 49 
+	black = 1
+	combined_tree = MCTSNode(empty_board, black)
+	combined_tree.visits = tree1.visits + tree2.visits
+	combined_tree.wins = tree1.wins + tree2.wins
+
+	# Get children of each tree
+	cmbnd_tr_children = combined_tree.children
+	tree1_children = tree1.children 
+	tree2_children = tree2.children 
+	
+	# Create child map of cmbnd tree
+	combined_child_map = {}
+	for child in tree1_children:
+		if child.action not in combined_child_map: 
+			combined_child_map[child.action] = [child]
+		else: 
+			combined_child_map[child.action].append(child)
+	for child in tree2_children: 
+		if child.action not in combined_child_map: 
+			combined_child_map[child.action] = [child]
+		else: 
+			combined_child_map[child.action].append(child)
+
+	# Combine action node together 
+	for action, children in combined_child_map.items(): 
+		# Merge the children 
+		merged_child = combine_nodes_recursively(children)
+		merged_child.parent = combined_tree
+		# Append tree
+		combined_tree.children.append(merged_child)
+
+	return combined_tree
+
+# Helper functions to combine MCTS sub-trees
+def combine_nodes_recursively(children): 
+	# Create merged child
+	child = children[0]
+	merged_child = MCTSNode(
+		child.state[:], 
+		child.color,
+		action=child.action
+		)
+
+	# Sum statistics
+	merged_child.visits = sum(child.visits for child in children)
+	merged_child.wins = sum(child.wins for child in children)
+
+	# Group grandchildren by action
+	grandchildren_action_map = {}
+	for child in children: 
+		grandchildren = child.children
+		for grandchild in grandchildren: 
+			if grandchild.action in grandchildren_action_map: 
+				grandchildren_action_map[grandchild.action].append(grandchild)
+			else: 
+				grandchildren_action_map[grandchild.action] = [grandchild]
+	
+	# Recurse on grandchildren 
+	for action, grandchildren in grandchildren_action_map.items(): 
+		merged_grandchild = combine_nodes_recursively(grandchildren)
+		merged_grandchild.parent = merged_child
+	
+	return merged_child
+
+
+
+
+
+

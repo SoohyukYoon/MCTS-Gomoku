@@ -1,8 +1,10 @@
-from mcts import MCTSNode, mcts_search
+from mcts import MCTSNode, mcts_search, combine_game_trees
 import pickle
 
+
 # Loads the Game Tree for testing
-def load_game_tree(filename='game_tree.pkl'):
+def load_game_tree(filename):
+	# --- Load in first game tree ---
 	try:
 		with open(filename, 'rb') as f: 
 			GameTree = pickle.load(f)
@@ -12,6 +14,22 @@ def load_game_tree(filename='game_tree.pkl'):
 		print(f"File {filename} was not found, please try a valid filename")
 		return None
 
+# Saves the Game Tree after training
+def save_game_tree(GameTree, filename='game_tree_merge.pkl'):
+	with open(filename, 'wb') as f: 
+		pickle.dump(GameTree, f)
+	print(f"GameTree saved to {filename}")
+
+# Check for if user wants to end training
+def input_listener():
+	global stop_training
+	while not stop_training: 
+		user_input = input()
+		if user_input.strip().lower() == "end training": 
+			stop_training = True
+			print("\n Training will pause after the current game completes ...")
+
+# Plays the game
 def play():
 
 	empty_board = ['.'] * 49 
@@ -23,10 +41,16 @@ def play():
 		if filename == '':
 			GameTree = load_game_tree('game_tree.pkl')
 		else: 
-			GameTree = load_game_tree(filename.strip())
+			filenames = filename.split(',')
+			GameTree = load_game_tree(filenames[0].strip())
+			if len(filenames) > 1: 
+				tree2 = load_game_tree(filenames[1].strip())
+				GameTree = combine_game_trees(GameTree, tree2)
 	except ValueError:
 		print("Invalid file or File does not exist, please try again")
 	
+	save_game_tree(GameTree)
+
 	print("___________________")
 	print("GAME: ")
 	draw = True
@@ -57,7 +81,7 @@ def play():
 			else: 
 				print("No child found")
 				temp_node = MCTSNode(board[:], 1, parent=child, action=None)
-				child = mcts_search(temp_node, 1, loss, iterations=10000)
+				child = mcts_search(temp_node, 1, loss, iterations=100000)
 			move = child.action
 			board[move] = current_player 
 		else:

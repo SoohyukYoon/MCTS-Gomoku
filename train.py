@@ -46,6 +46,7 @@ def train():
 	try: 
 		if filename == '':
 			GameTree = load_game_tree('game_tree.pkl')
+			print(GameTree.visits)
 		elif filename == 'empty': 
 			GameTree = MCTSNode(empty_board, black)
 		else: 
@@ -62,7 +63,7 @@ def train():
 		if stop_training:
 			print(f"\n Training stopped by user at game {game}")
 			save_game_tree(GameTree)
-			break
+			return
 
 		print("___________________")
 		print("GAME: ", game)
