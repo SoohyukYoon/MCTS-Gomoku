@@ -85,31 +85,24 @@ def play():
 			move = child.action
 			board[move] = current_player 
 		else:
-			# move_str = input("Please enter your move: ")
-			# try: 
-			# 	row_str, col_str = move_str.split(',')
-			# 	move = int(row_str.strip()) * 7 +  int(col_str.strip())
+			move_str = input("Please enter your move: ")
+			try: 
+				row_str, col_str = move_str.split(',')
+				move = int(row_str.strip()) * 7 +  int(col_str.strip())
 
-			# 	board[move] = current_player
+				board[move] = current_player
 				
-			# 	found = False
-			# 	for c in child.children: 
-			# 		if c.action == move: 
-			# 			child = c
-			# 			found = True
-			# 			break 
-			# 	if not found: 
-			# 		child = MCTSNode(board[:], 2, parent=child,action=move)
-			# except ValueError: 
-			# 	print("Bad input value")
-			next_child = child.best_child()
-			if next_child: 
-				child = next_child 
-				move = child.action
-			else: 
-				print("No child found")
-				temp_node = MCTSNode(board[:], 1, parent=child, action=None)
-				child = mcts_search(temp_node, 1, loss, iterations=100000)
+				found = False
+				for c in child.children: 
+					if c.action == move: 
+						child = c
+						found = True
+						break 
+				if not found: 
+					child = MCTSNode(board[:], 2, parent=child,action=move)
+			except ValueError: 
+				print("Bad input value")
+			
 			move = child.action
 			board[move] = current_player 
 

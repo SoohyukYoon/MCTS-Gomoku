@@ -149,7 +149,7 @@ class MCTSNode:
 		# print("check_winner_for_state: ", action)
 		return MCTSNode(state,color,...,action).check_winner()
 
-	def backpropagate(self, winner, win, draw, loss):
+	def backpropagate(self, winner, loss):
 		"""Update stats up the tree."""
 		self.visits += 1
 		# self.wins += result
@@ -163,18 +163,21 @@ class MCTSNode:
 		while node: 
 			node.visits  += 1 
 			player_at_parent = 3 - node.get_current_player()
-			if winner == player_at_parent: 
-				node.wins += win # / (i * 0.05) 
+			if winner == player_at_parent:
+				if i < 2:  
+					node.wins += 10
+				else: 
+					node.wins += 1
 			elif winner == 0.5: 
-				node.wins -= draw
+				node.wins -= 1
 			else: 
 				if loss: 
-					node.wins -= loss
+					node.wins -= 3
 			node = node.parent
 			i += 1 
 
 # MCTS Search
-def mcts_search(root, color, win, draw, loss, iterations=500):
+def mcts_search(root, color, loss, iterations=500):
 	# root = MCTSNode(root_state, color)
 	i = 0 
 	for _ in range(iterations):
@@ -182,9 +185,12 @@ def mcts_search(root, color, win, draw, loss, iterations=500):
 			print("count: ", i)
 		node = root
 
-		# Selection
+		# Selection: If we haven't visited every child node at least once, 
+		# 			 and the current node is not terminal state ---
+		#			 Then focus on expanding on best child, 
+		# 			 which at the start is going to be random
 		while not node.is_terminal() and node.is_fully_expanded():
-			node = node.best_child(c=0)
+			node = node.best_child(c=1.41)
 
 		# Expansion
 		if not node.is_terminal():
@@ -194,7 +200,7 @@ def mcts_search(root, color, win, draw, loss, iterations=500):
 		winner = node.rollout()
 
 		# Backpropagation: Update the root node 
-		node.backpropagate(winner, win, draw, loss)
+		node.backpropagate(winner, loss)
 		i += 1 
 	root = root.best_child(c=0)
 

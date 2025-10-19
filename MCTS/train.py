@@ -88,10 +88,10 @@ def train():
 
 			if current_player == 1:
 				loss_1 = True
-				child = mcts_search(child, 1, loss_1, iterations=10000)
+				child = mcts_search(child, 1, loss_1, iterations=50000)
 			else:
 				loss_2 = True
-				child = mcts_search(child, 2, loss_2, iterations=10000)
+				child = mcts_search(child, 2, loss_2, iterations=50000)
 
 			board[child.action] = current_player
 			if current_player == 1: 
