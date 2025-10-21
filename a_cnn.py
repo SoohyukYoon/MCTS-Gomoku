@@ -97,7 +97,7 @@ def organize_games(root, transform=True):
 	for game in root.findall('game'): 
 		game_count += 1 
 		# Initialize the features   
-		game_state_b, game_state_w, game_state_e = [0] * 225, [0] * 225, [1] * 225
+		game_state_b, game_state_w, game_state_e = np.array([0] * 225), np.array([0] * 225), np.array([1] * 225)
 
 		# Get moves 
 		moves = game.find('move').text.strip().split()
@@ -122,9 +122,17 @@ def organize_games(root, transform=True):
 			game_state_b_copy = game_state_b.copy()
 			game_state_w_copy = game_state_w.copy()
 			game_state_e_copy = game_state_e.copy()
+			# for j in range(2): 
+			# 	if j ==1: 
+			# 		flip = True
+			# 		game_state_b_copy = np.flipud(game_state_b_copy.reshape(15, 15)).flatten()
+			# 		game_state_w_copy = np.flipud(game_state_w_copy.reshape(15, 15)).flatten()
+			# 		game_state_e_copy = np.flipud(game_state_e_copy.reshape(15, 15)).flatten()
+			# 		next_move = (14 - next_move // 15) * 15 + (next_move % 15)
 
 			# a) check for 0 rotation
-			state_action = (hash(tuple((game_state_b_copy + game_state_e_copy + game_state_e_copy))), next_move)
+			combined = list(game_state_b_copy) + list(game_state_w_copy) + list(game_state_e_copy)
+			state_action = (hash(tuple(combined)), next_move)
 			if state_action not in game_set: 
 				# Set it to hash to compress to single integer, faster processing during training
 				# Must make to tuple since lists are mutable, so need to make to immutable for set
@@ -135,11 +143,12 @@ def organize_games(root, transform=True):
 
 			if transform: 
 				# b) check for 90 rotation
-				game_state_b_90 = np.rot90(game_state_b_copy.shape(15, 15).flatten()) 
-				game_state_w_90 = np.rot90(game_state_w_copy.shape(15, 15).flatten()) 
-				game_state_e_90 = np.rot90(game_state_e_copy.shape(15, 15).flatten()) 
-				next_move_90 = (next_move // 15) + (14 - (next_move % 4)) * 15
-				state_action = (hash(tuple((game_state_b_90 + game_state_b_90 + game_state_b_90))), next_move_90)
+				game_state_b_90 = np.rot90(game_state_b_copy.reshape(15, 15)).flatten() 
+				game_state_w_90 = np.rot90(game_state_w_copy.reshape(15, 15)).flatten() 
+				game_state_e_90 = np.rot90(game_state_e_copy.reshape(15, 15)).flatten()  
+				combined = list(game_state_b_90) + list(game_state_w_90) + list(game_state_e_90)
+				next_move_90 = (next_move // 15) + (14 - (next_move % 15)) * 15
+				state_action = (hash(tuple(combined)), next_move_90)
 				if state_action not in game_set: 
 					# Set it to hash to compress to single integer, faster processing during training
 					# Must make to tuple since lists are mutable, so need to make to immutable for set
@@ -149,11 +158,12 @@ def organize_games(root, transform=True):
 					states_erased_count += 1 
 
 				# c) check for 180 rotation
-				game_state_b_180 = np.rot90(game_state_b_90.shape(15, 15).flatten()) 
-				game_state_w_180 = np.rot90(game_state_w_90.shape(15, 15).flatten()) 
-				game_state_e_180 = np.rot90(game_state_e_90.shape(15, 15).flatten()) 
-				next_move_180 = (next_move_90 // 15) + (14 - (next_move_90 % 4)) * 15
-				state_action = (hash(tuple((game_state_b_180 + game_state_w_180 + game_state_e_180))), next_move_180)
+				game_state_b_180 = np.rot90(game_state_b_90.reshape(15, 15)).flatten() 
+				game_state_w_180 = np.rot90(game_state_w_90.reshape(15, 15)).flatten() 
+				game_state_e_180 = np.rot90(game_state_e_90.reshape(15, 15)).flatten() 
+				next_move_180 = (next_move_90 // 15) + (14 - (next_move_90 % 15)) * 15
+				combined = list(game_state_b_180) + list(game_state_w_180) + list(game_state_e_180)
+				state_action = (hash(tuple(combined)), next_move_180)
 				if state_action not in game_set: 
 					# Set it to hash to compress to single integer, faster processing during training
 					# Must make to tuple since lists are mutable, so need to make to immutable for set
@@ -163,11 +173,12 @@ def organize_games(root, transform=True):
 					states_erased_count += 1 
 
 				# d) check for 270 rotation 
-				game_state_b_270 = np.rot90(game_state_b_180.shape(15, 15).flatten()) 
-				game_state_w_270 = np.rot90(game_state_w_180.shape(15, 15).flatten())  
-				game_state_e_270 = np.rot90(game_state_e_180.shape(15, 15).flatten()) 
+				game_state_b_270 = np.rot90(game_state_b_180.reshape(15, 15)).flatten() 
+				game_state_w_270 = np.rot90(game_state_w_180.reshape(15, 15)).flatten() 
+				game_state_e_270 = np.rot90(game_state_e_180.reshape(15, 15)).flatten() 
 				next_move_270 = (next_move_180 // 15) + (14 - (next_move_180 % 15)) * 15
-				state_action = (hash(tuple((game_state_b_270 + game_state_w_270 + game_state_e_270))), next_move_270)
+				combined = list(game_state_b_270) + list(game_state_w_270) + list(game_state_e_270)
+				state_action = (hash(tuple(combined)), next_move_270)
 				if state_action not in game_set: 
 					# Set it to hash to compress to single integer, faster processing during training
 					# Must make to tuple since lists are mutable, so need to make to immutable for set
@@ -204,7 +215,6 @@ def organize_games(root, transform=True):
 		pickle.dump(game_list[:int(len(game_list) * (4/5))], f)
 	with open("dataset/validation.pkl", "wb") as f: 
 		pickle.dump(game_list[int(len(game_list) * (4/5)):], f)
-
 
 #### CONVOLUTIONAL NEURAL NETWORKS BABY #### 
 """
@@ -264,7 +274,6 @@ class CNN(nn.Module):
 		x = self.layers(x) 
 		return x 
 
-
 class TRAIN(): 
 	"""
 	Defines the training class with the necessary eval and train function	
@@ -317,7 +326,7 @@ class TRAIN():
 				pred = output.argmax(dim=1)
 				# Uses item(): tensor_object -> int/float
 				correct += (pred == actions).sum().item()
-		accuracy = correct / len(self.data_loader.dataset)
+		accuracy = correct / len(data_loader.dataset)
 		return accuracy
 
 	def train(self, n_epochs):
@@ -364,7 +373,8 @@ class TRAIN():
 			# 7. Append training loss to plot dictionary
 			history['train_loss'].append(total_loss.item() / max(1, len(self.train_loader)))
 			# acc_v = evaluate(model, valid_loader)
-			acc_t = self.evaluate(self.model, self.train_loader)
+			use_train_loader = True 
+			acc_t = self.evaluate(self.model, use_train_loader)
 			# print(f"Epoch {epoch}, Valid Accuracy {acc_v * 100:.2f}%")
 			history['train_acc'].append(acc_t)
 			# print(f"Epoch {epoch}, Training Accuracy {acc_t * 100:.2f}%")
@@ -475,7 +485,3 @@ if __name__ == "__main__":
 	fig, ax = plot_train_loss(history)
 	fig_a, ax_a = plot_train_acc(history)
 	plt.show()
-
-
-
-
