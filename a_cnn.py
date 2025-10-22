@@ -24,6 +24,22 @@ import torch.nn.functional as F
 import torchvision
 from torchvision import transforms as T
 
+
+def ddp_set(rank, world_size): 
+	os.environ["MASTER_ADDR"] = "localhost"
+	os.environ["MASTER_PORT"] = "12344"
+	# For CUDA GPU communications
+	init_process_group(backend="nccl", rank=rank, world_size=world_size)
+
+
+
+# Torch shit for Multi-GPU training
+import torch.multiprocessing as mp 
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed import init_process_group, destroy_process_group
+import os 
+
 # For Google Collab when using GPU for training 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using device: {device}")
@@ -105,18 +121,22 @@ def organize_games(root, transform=True):
 		# Since the game consists only of moves
 		# iterate through the game, and create the
 		# update game state per-iteration: 
-		for i in range(len(moves) - 1): 
+		for i in range(-1, len(moves) - 1): 
 			state_count += 1 
-			# Initialize current move 
-			move = (int(moves[i][1:]) - 1) * 15 + ord(moves[i][0]) - ord('a')
 
-			# 1) Since we need the action retrieve the next move 
-			next_move = (int(moves[i + 1][1:]) - 1) * 15 + ord(moves[i + 1][0]) - ord('a')
+			if i == -1: 
+				next_move = (int(moves[i + 1][1:]) - 1) * 15 + ord(moves[i + 1][0]) - ord('a')
+			else: 
+				# Initialize current move 
+				move = (int(moves[i][1:]) - 1) * 15 + ord(moves[i][0]) - ord('a')
 
-			# 2) Update the game state with current move 
-			game_state_b[move] = (i + 1) % 2 
-			game_state_w[move] = i % 2 
-			game_state_e[move] = 0 
+				# 1) Since we need the action retrieve the next move 
+				next_move = (int(moves[i + 1][1:]) - 1) * 15 + ord(moves[i + 1][0]) - ord('a')
+
+				# 2) Update the game state with current move 
+				game_state_b[move] = (i + 1) % 2 
+				game_state_w[move] = i % 2 
+				game_state_e[move] = 0 
 
 			# 3) Check if game_state-next_move already in set 
 			game_state_b_copy = game_state_b.copy()

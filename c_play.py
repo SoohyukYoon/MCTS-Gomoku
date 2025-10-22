@@ -85,15 +85,18 @@ for g in range(1):
 				board[7][7] = 1
 				continue
 			with torch.no_grad(): 
-				output = model_t(state)
+				output = model(state)
 				output = output[0].tolist()
+
 				while True: 
 					move = output.index(max(output))
+					# print(output[move])
 					row = move // 15 
 					col = move % 15
-					output[move] = 0
+					output[move] = -float("inf")
+
 					# So on first oupt, 0nly 0,0 for some reason has loss 0  
-					#print(output)
+					# print(output)
 					# print(f"AI trying position: row={row}, col={col}")
 					# print(f"White occupied: {state[0, 1, row, col]}, Black occupied: {state[0, 0, row, col]}")
 					if state[0, 1, row, col] != 1 and state[0, 0, row, col] != 1:
@@ -113,22 +116,37 @@ for g in range(1):
 		# If white's move make move
 		if i % 2 == 1: 
 			with torch.no_grad(): 
-				output = model_t(state)
+				output = model(state)
 				output = output[0].tolist()
 				while True: 
 					move = output.index(max(output))
 					row = move // 15 
 					col = move % 15
-					output[move] = 0
+					output[move] = -float("inf")
 					# So on first oupt, 0nly 0,0 for some reason has loss 0  
 					#print(output)
 					# print(f"AI trying position: row={row}, col={col}")
 					# print(f"White occupied: {state[0, 1, row, col]}, Black occupied: {state[0, 0, row, col]}")
 					if state[0, 1, row, col] != 1 and state[0, 0, row, col] != 1:
 						break 
-				state[0, 0, row, col] = 1
+				state[0, 1, row, col] = 1
 				state[0, 2, row, col] = 0
 				board[row][col] = 2
+			# while True:
+			# 	move_str = input("Please enter your move: ")
+			# 	try: 
+			# 		row_str, col_str = move_str.split(',')
+			# 		row = int(row_str.strip()) - 1
+			# 		col = ord(col_str.strip()) - ord('a') 
+			# 		if state[0, 1, row, col] == 1 or state[0, 0, row, col] == 1:
+			# 			print("Stone already present.")
+			# 			continue 
+			# 		state[0, 1, row, col] = 2
+			# 		state[0, 2, row, col] = 0
+			# 		board[row][col] = 2
+			# 		break
+			# 	except ValueError: 
+			# 		print("Bad input value")
 			# check if game ended: 
 			action = row * 15 + col
 			board_flat = [ele for row in board for ele in row]
@@ -158,18 +176,3 @@ for g in range(1):
 	print("Non transform win count: ", non_transform_win)
 	print("Transform win count: ", transform_win)
 
-# while True:
-# 	move_str = input("Please enter your move: ")
-# 	try: 
-# 		row_str, col_str = move_str.split(',')
-# 		row = int(row_str.strip()) - 1
-# 		col = ord(col_str.strip()) - ord('a') 
-# 		if state[0, 1, row, col] == 1 or state[0, 0, row, col] == 1:
-# 			print("Stone already present.")
-# 			continue 
-# 		state[0, 1, row, col] = 1
-# 		state[0, 2, row, col] = 0
-# 		board[row][col] = 2
-# 		break
-# 	except ValueError: 
-# 		print("Bad input value")
