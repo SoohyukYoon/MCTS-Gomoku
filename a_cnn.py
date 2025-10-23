@@ -16,7 +16,7 @@ from tqdm import tqdm
 # Used to plot loss graphs
 import matplotlib.pyplot as plt
 
-# Torch shit
+# Torch shit -- most from 444
 import torch  
 from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn 
@@ -24,14 +24,16 @@ import torch.nn.functional as F
 import torchvision
 from torchvision import transforms as T
 
-
-def ddp_set(rank, world_size): 
-	os.environ["MASTER_ADDR"] = "localhost"
-	os.environ["MASTER_PORT"] = "12344"
-	# For CUDA GPU communications
-	init_process_group(backend="nccl", rank=rank, world_size=world_size)
-
-
+# Torch shit for MP
+import torch.multiprocessing as mp
+# The module that takes in input data and distributes it across GPUs
+from torch.utils.data.distributed import DistributedSampler
+# "The main work horse, DDP wrapper" -- guy from PyTorch
+# I am assuming this is the actual module that does the distributed computing
+from torch.nn.parallel import DistributedDataParallel as DDP
+# The distributed groups
+from torch.distributed import init_process_group, destroy_process_group
+import os
 
 # Torch shit for Multi-GPU training
 import torch.multiprocessing as mp 
@@ -40,55 +42,22 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 import os 
 
-# For Google Collab when using GPU for training 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"Using device: {device}")
 
-
-#### DATASET #####
-class GameDataset(Dataset): 
+#### INITIALIZATION HELPERS #### 
+def ddp_setup(rank, world_size): 
 	"""
-	Create class for Game Data: 
-		Wrap into torch object and split into train and validation groups
-		Dataset is the parent class of GameDataset, such that we are able to do; 
-		batching, shuffling, and etc
+	Initialize distributed process group such that each process can communicate with each other
+	Args: 
+		world_size: total number of processes
+		rank: unique identifier for a process, "usually" range 0--world_size-1
 	"""
-
-	def __init__(self, root, split): 
-		"""
-		Args: 
-			root (str): The root directory of the dataset
-			split (str): Can be 'train', 'val', 'test'
-		"""
-		self.root = root
-		self.split = split
-		with open(f"{root}/{split}.pkl", "rb") as f:  
-			self.game_list = pickle.load(f)
-
-	def __len__(self): 
-		"""
-		Returns: 
-			The number of game states inside state_list
-		"""
-		return len(self.game_list)
-
-	def __getitem__(self, idx): 
-		"""
-		Args: 
-			idx (int): The index of the state-action point
-		Returns: 
-			state (Tensor): The current board state before action
-			action (int): The action taken after the current board state
-		"""
-		states, action = self.game_list[idx]
-		state_b = torch.tensor(states[0], dtype=torch.float32)
-		state_w = torch.tensor(states[1], dtype=torch.float32)
-		state_e = torch.tensor(states[2], dtype=torch.float32)
-		action = torch.tensor(action, dtype=torch.long)
-
-		# Cool thing: .array(): creates 3 seperate (225) tensors
-		#			  .stack(): creates a single (3, 225) tensor
-		return torch.stack([state_b, state_w, state_e]).reshape(3, 15, 15), action
+	# We initialize the Master: this machine coordinates communication with all processes
+	# IP address of machine running rank 0 process, which is our machine --- so local 
+	os.environ["MASTER_ADDR"] = "localhost"
+	# Include free port on machine 
+	os.environ["MASTER_PORT"] = "12344"
+	# For CUDA GPU communications --- initialize default DDP group
+	init_process_group(backend="nccl", rank=rank, world_size=world_size)
 
 def organize_games(root, transform=True):
 	"""
@@ -110,7 +79,7 @@ def organize_games(root, transform=True):
 	game_list = []
 
 	# Iterate through each game:
-	for game in root.findall('game'): 
+	for game in tqdm(root.findall('game')): 
 		game_count += 1 
 		# Initialize the features   
 		game_state_b, game_state_w, game_state_e = np.array([0] * 225), np.array([0] * 225), np.array([1] * 225)
@@ -142,26 +111,25 @@ def organize_games(root, transform=True):
 			game_state_b_copy = game_state_b.copy()
 			game_state_w_copy = game_state_w.copy()
 			game_state_e_copy = game_state_e.copy()
-			# for j in range(2): 
-			# 	if j ==1: 
-			# 		flip = True
-			# 		game_state_b_copy = np.flipud(game_state_b_copy.reshape(15, 15)).flatten()
-			# 		game_state_w_copy = np.flipud(game_state_w_copy.reshape(15, 15)).flatten()
-			# 		game_state_e_copy = np.flipud(game_state_e_copy.reshape(15, 15)).flatten()
-			# 		next_move = (14 - next_move // 15) * 15 + (next_move % 15)
+			for j in range(2): 
+				if j ==1: 
+					flip = True
+					game_state_b_copy = np.flipud(game_state_b_copy.reshape(15, 15)).flatten()
+					game_state_w_copy = np.flipud(game_state_w_copy.reshape(15, 15)).flatten()
+					game_state_e_copy = np.flipud(game_state_e_copy.reshape(15, 15)).flatten()
+					next_move = (14 - next_move // 15) * 15 + (next_move % 15)
 
-			# a) check for 0 rotation
-			combined = list(game_state_b_copy) + list(game_state_w_copy) + list(game_state_e_copy)
-			state_action = (hash(tuple(combined)), next_move)
-			if state_action not in game_set: 
-				# Set it to hash to compress to single integer, faster processing during training
-				# Must make to tuple since lists are mutable, so need to make to immutable for set
-				game_set.add(state_action)
-				game_list.append(([game_state_b_copy, game_state_w_copy, game_state_e_copy], next_move))
-			else: 
-				states_erased_count += 1 
+				# a) check for 0 rotation
+				combined = list(game_state_b_copy) + list(game_state_w_copy) + list(game_state_e_copy)
+				state_action = (hash(tuple(combined)), next_move)
+				if state_action not in game_set: 
+					# Set it to hash to compress to single integer, faster processing during training
+					# Must make to tuple since lists are mutable, so need to make to immutable for set
+					game_set.add(state_action)
+					game_list.append(([game_state_b_copy, game_state_w_copy, game_state_e_copy], next_move))
+				else: 
+					states_erased_count += 1 
 
-			if transform: 
 				# b) check for 90 rotation
 				game_state_b_90 = np.rot90(game_state_b_copy.reshape(15, 15)).flatten() 
 				game_state_w_90 = np.rot90(game_state_w_copy.reshape(15, 15)).flatten() 
@@ -236,6 +204,63 @@ def organize_games(root, transform=True):
 	with open("dataset/validation.pkl", "wb") as f: 
 		pickle.dump(game_list[int(len(game_list) * (4/5)):], f)
 
+#### DATASET #####
+class GameDataset(Dataset): 
+	"""
+	Create class for Game Data: 
+		Wrap into torch object and split into train and validation groups
+		Dataset is the parent class of GameDataset, such that we are able to do; 
+		batching, shuffling, and etc
+	"""
+
+	def __init__(self, root, split): 
+		"""
+		Args: 
+			root (str): The root directory of the dataset
+			split (str): Can be 'train', 'val', 'test'
+		"""
+		self.root = root
+		self.split = split
+		with open(f"{root}/{split}.pkl", "rb") as f:  
+			self.game_list = pickle.load(f)
+
+	def __len__(self): 
+		"""
+		Returns: 
+			The number of game states inside state_list
+		"""
+		return len(self.game_list)
+
+	def __getitem__(self, idx): 
+		"""
+		Args: 
+			idx (int): The index of the state-action point
+		Returns: 
+			state (Tensor): The current board state before action
+			action (int): The action taken after the current board state
+		"""
+		states, action = self.game_list[idx]
+		state_b = torch.tensor(states[0], dtype=torch.float32)
+		state_w = torch.tensor(states[1], dtype=torch.float32)
+		state_e = torch.tensor(states[2], dtype=torch.float32)
+		action = torch.tensor(action, dtype=torch.long)
+
+		# Cool thing: .array(): creates 3 seperate (225) tensors
+		#			  .stack(): creates a single (3, 225) tensor
+		return torch.stack([state_b, state_w, state_e]).reshape(3, 15, 15), action
+
+#### DATALOADER ####
+def prepare_dataloader(dataset: Dataset): 
+	return DataLoader(
+		dataset, 
+		batch_size=32, 
+		# sampler handles the shuffling internally, good practice to not shuffle again
+			# Why data gets corrupted makes no sense --- Gemini for 
+		shuffle=False,
+		# Include Distributed Sampler: Ensures that samples are chunked without overlapping samples
+		sampler = DistributedSampler(dataset)
+	)
+
 #### CONVOLUTIONAL NEURAL NETWORKS BABY #### 
 """
 I was planning on implementing Conv2d and MaxPool2d the way I did it on the 444 MP
@@ -294,21 +319,31 @@ class CNN(nn.Module):
 		x = self.layers(x) 
 		return x 
 
+#### TRAINING AND EVALUATION ####
 class TRAIN(): 
 	"""
 	Defines the training class with the necessary eval and train function	
 	"""
 
-	def __init__(self, model, lr, gamma, criterion, optimizer, train_loader, valid_loader=None): 
+	def __init__(self, model, lr, gamma, criterion, optimizer, gpu_id, train_loader, valid_loader=None): 
 		"""
 		Initializes the class
 		Args: 
+			gpu_id: The GPUs ID 
+			model: The model we are training with
 			lr: learning rate
 			gamma: learning rate decay 
 			criterion: loss function 
 			optimizer: backpropogation policy
+			gpu_id: ID of our GPU(s)
+			train_loader: Training Dataset wrapped in Dataloader
+			valid_loader: Validation Dataset wrapped in Dataloader
 		"""
-		self.model = model
+		self.gpu_id = gpu_id 
+		# Wrap in DDP such that our trained model can be distributed across GPUs
+			# device_ids: consists of a list of IDs the GPUs live on 
+			# Since self.model refers to the DDP wrapped object we need to add .module to access model parameters
+		self.model = DDP(self.model, device_ids=[self.gpu_id])
 		self.train_loader = train_loader
 		self.valid_loader = valid_loader
 		self.lr = lr 
@@ -320,7 +355,6 @@ class TRAIN():
 		# Define Scheduler: Decays every epoch 
 		# Fun fact the "step" is called step, bc the change in LR changes like a step when plotted
 		self.scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=gamma)
-
 		
 	#### Training and Validation ####
 	def evaluate(self, model, train_loader=False): 
@@ -340,7 +374,7 @@ class TRAIN():
 		data_loader = self.valid_loader if not train_loader else self.train_loader
 		with torch.no_grad(): 
 			for states, actions in tqdm(data_loader): 
-				states, actions = states.to(device), actions.to(device)
+				states, actions = states.to(self.gpu_id), actions.to(self.gpu_id)
 				output = model(states)
 				# argmax at dim=1, which is 225, select one of 225
 				pred = output.argmax(dim=1)
@@ -370,16 +404,16 @@ class TRAIN():
 			#		Note: Either way even if not call .train() it gets called by default, but necessary
 			#			  to call bc if we call .eval() then train again, eval removes dropout and batch normalization leading
 			#			  to pretty shitty overfitted results.
-			self.model.train()
+			self.model.module.train()
 			total_loss = 0 
 			# After each epoch train_loader is reshuffled
 			for (states, actions) in (self.train_loader): 
-				# 0. Prepare data by moving it to device
-				states, actions = states.to(device), actions.to(device)
+				# 0. Prepare data by moving it to GPU
+				states, actions = states.to(self.gpu_id), actions.to(self.gpu_id)
 				# 1. Clear previous Gradient, we don't want old gradient contributing again
 				self.optimizer.zero_grad()
 				# 2. Forward pass the states
-				output = self.model(states)
+				output = self.model.module(states)
 				# 3. Calculate the loss
 				loss = self.criterion(output, actions)
 				total_loss += loss
@@ -400,7 +434,7 @@ class TRAIN():
 			# print(f"Epoch {epoch}, Training Accuracy {acc_t * 100:.2f}%")
 			i += 1 
 		return history
-		
+	
 def plot_train_loss(history): 
 	"""
 	Plots the training loss 
@@ -439,69 +473,47 @@ def plot_train_acc(history):
 	fig.tight_layout() # shows the labels I've defined
 	return fig, ax
 
+#### MAIN ####
+
+def main(rank: int, world_size: int, total_epochs: int): 
+	# Initialize DDP group
+	ddp_setup(rank, world_size)
+	# Organize game data: 
+	organize_games('renjunet_v10_20180803.xml')
+	# dataset, and wrap into dataloader
+	train_loader = prepare_dataloader(GameDataset(root='dataset', split='training'))
+	# Initialize model
+		# Note: No .to(device), this I moved to training class initialization
+	model = CNN()
+	# Create Training instance
+	train = TRAIN(
+				rank,
+				model, 
+				lr=0.0001, 
+				gamma=0.9, 
+				optimizer=torch.optim.Adam(model.parameters(), 
+				lr=0.0001), 
+				criterion=nn.CrossEntropyLoss(), 
+				train_loader=train_loader
+			)	
+	# Train the model 
+	history = train.train(n_epochs=10)
+	# Save the trained weights -- could u pickle, but pytorch was more sigma
+	torch.save(model.state_dict(), 'model_weigths_transform.pth')
+	# Destroy the process
+	destroy_process_group()
+
 if __name__ == "__main__": 
-	# Generate GameDataset
-	transform = False
-	organize_games('renjunet_v10_20180803.xml', transform)
-
-	# Generate numpy dataset objects
-	train_dataset = GameDataset(root='dataset', split='training')
-	valid_dataset = GameDataset(root='dataset', split='validation')
-
-	# Test train_dataset: 
-	state, action = train_dataset.__getitem__(0)
-	# print("State after object creation: ", state)
-	# print("Action after object creation: ", action)
-
-
-	#### DATALOADER ####
 	"""
-	Wraps the Dataset with a DataLoader such that we are able to conviently: 
-	shuffle, batch, and multiprocessing(cpu, exclusively) our training data 
+	Begins the training process
 	"""
-
-	# Initialize batch size, most papers use 32 
-	batch_size = 32 
-
-	# Shuffles our data-set to ensure randomization during each epoch
-	train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-	valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=True)
-
-	sample_states, sample_actions = next(iter(train_loader))
-	# print(f"State batch shape: {sample_states.size()}")
-	# print(f"Action batch shape: {sample_actions.size()}")
-
-	# Creat eht model instanel and move it to the GPU 
-	model = CNN().to(device)
-	print(model)
-	print(f"Model has {sum(p.numel() for p in model.parameters())} parameters.")
-
-	dummy_input = torch.randn(1, 3, 15, 15, device=device, dtype=torch.float)
-	output = model(dummy_input)
-	assert output.size() == (1, 225), f"Expected output size (1, 225), got {output.size()}!"
-	print("Test passed!")
-
-	#### Loss Function, Optimizer, and Scheduler #### 
-
-	# Define learning rate --- Remember gradient explosions need to be compensated with small LR
-	lr = 0.001
-
-	# Define gamma: learning rate decay, how quickly the training should converge to a loss
-	# We leave gamma to 0.9, such that learning rate is 90% of what is was last epoch
-	# TLDR; I mean soohyuk you already know this, but in case you are a dumbass to PREVEN OVERSHOOTING
-	gamma = 0.9
-
-	# Define Cross Entropy Loss
-	criterion = nn.CrossEntropyLoss()
-
-	# Define Adam Optimizer: using this to mini-batch instead of SGD
-	optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-
-	train = TRAIN(model, train_loader, valid_loader, lr, gamma, criterion, optimizer)
-
-	n_epochs = 1
-	history = train.train(n_epochs)
-
-	fig, ax = plot_train_loss(history)
-	fig_a, ax_a = plot_train_acc(history)
-	plt.show()
+	# import sys
+	# total_epochs = int(sys.argv[1])
+	# world_size = torch.cuda.device_count()
+	# # mp.spawn: 
+	# #	1. Creates n processes, where each process is assigned to a GPU
+	# #	2. Each process gets a rank, id, range: 0,..., nprocs-1
+	# # By design mp.spawn MUST call some main function
+	# # By design it WILL pass rank as first arg, and args in order
+	# mp.spawn(main, args=(world_size, total_epochs), nprocs=world_size)
+	organize_games('renjunet_v10_20180803.xml')
