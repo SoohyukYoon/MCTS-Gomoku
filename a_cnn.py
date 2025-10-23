@@ -24,17 +24,6 @@ import torch.nn.functional as F
 import torchvision
 from torchvision import transforms as T
 
-# Torch shit for MP
-import torch.multiprocessing as mp
-# The module that takes in input data and distributes it across GPUs
-from torch.utils.data.distributed import DistributedSampler
-# "The main work horse, DDP wrapper" -- guy from PyTorch
-# I am assuming this is the actual module that does the distributed computing
-from torch.nn.parallel import DistributedDataParallel as DDP
-# The distributed groups
-from torch.distributed import init_process_group, destroy_process_group
-import os
-
 # Torch shit for Multi-GPU training
 import torch.multiprocessing as mp 
 from torch.utils.data.distributed import DistributedSampler
@@ -399,6 +388,7 @@ class TRAIN():
 			}
 		i = 0 
 		for epoch in range(n_epochs): 
+			print(f"[GPU{self.gpu_id}] Epoch {epoch} | Batchsize: {self.batch_size} | Steps: {len(self.train_data)}")
 			# Sets the model to training mode: part of nn.Module
 			#		We get the perks of automatic 1) dropout 2) batchnormalization, talked about in class but lowkey forget 
 			#		Note: Either way even if not call .train() it gets called by default, but necessary
