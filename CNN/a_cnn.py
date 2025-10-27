@@ -405,6 +405,7 @@ class TRAIN():
 				# 2. Forward pass the states
 				output = self.model.module(states)
 				# 3. Calculate the loss
+				#	actions does not need to be an indicator matrix, in torch merely providing the index is enough
 				loss = self.criterion(output, actions)
 				total_loss += loss
 				# 4. Calculate all the Gradients, pytorch just does all this, it's like...magic
@@ -464,7 +465,6 @@ def plot_train_acc(history):
 	return fig, ax
 
 #### MAIN ####
-
 def main(rank: int, world_size: int, total_epochs: int): 
 	# Initialize DDP group
 	ddp_setup(rank, world_size)

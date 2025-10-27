@@ -185,14 +185,14 @@ def mcts_search(root, color, loss, iterations=500):
 			print("count: ", i)
 		node = root
 
-		# Selection: If we haven't visited every child node at least once, 
-		# 			 and the current node is not terminal state ---
-		#			 Then focus on expanding on best child, 
-		# 			 which at the start is going to be random
+		# Selection: If the node is not terminal and if there are no move left to play
+		#			 then shift the node to be a child, such that we can expand our tree
+		#			 from its own child --- this method allows us to explore more deeply
+		#			 the potentially "promising nodes" more often
 		while not node.is_terminal() and node.is_fully_expanded():
 			node = node.best_child(c=1.41)
 
-		# Expansion
+		# Expansion: Expand the tree 
 		if not node.is_terminal():
 			node = node.expand()
 
