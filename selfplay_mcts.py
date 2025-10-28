@@ -34,6 +34,11 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 import os 
 
+# Prob need to get rid of this at some point and integrate ddp
+# Initialize our device 
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"Using device: {device}")
+
 class ActionNode:
 	"""
 	Custom class to handle MCTS operations
@@ -173,11 +178,6 @@ class ActionNode:
 		empty_state = self.new_s[2]
 		return torch.all(empty_state == 0)
 
-
-# Initialize our device 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"Using device: {device}")
-
 def mcts_search(root_state: torch.Tensor, color: int, simulations=1600):
 	# Load the trained weights and set to eval
 	model = load_and_eval(CNN().to(device))
@@ -230,7 +230,6 @@ def mcts_search(root_state: torch.Tensor, color: int, simulations=1600):
 	return selected_child
 		
 def load_and_eval(model): 
-	print("Model initialized!")
 	model.load_state_dict(torch.load('soogo_weights.pth', map_location=torch.device(device))) 
 	# Set to eval mode so that gradients don't flow back 
 	model.eval()

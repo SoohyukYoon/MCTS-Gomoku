@@ -28,7 +28,6 @@ model_t.load_state_dict(torch.load('model_weights_transform.pth', weights_only=T
 # Set to eval mode to play 
 model_t.eval()
 
-
 # Check for winner in Gomoku 
 def check_winner(state, player, action): 
 	dirs = ((1, 0), (0, 1), (1, 1), (1, -1))
