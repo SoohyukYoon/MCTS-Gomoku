@@ -1,3 +1,7 @@
+"""
+IMPORTANT: FILE IS OUTDATE, TRAIN GOT MOVED TO MAIN IN a_cnn
+"""
+
 from a_cnn import *
 import torch  
 from torch.utils.data import Dataset, DataLoader, ddp_set, prepare_dataloader

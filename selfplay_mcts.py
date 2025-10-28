@@ -36,7 +36,7 @@ import os
 
 class ActionNode:
 	"""
-	Custom class to handle MCTS operations. 
+	Custom class to handle MCTS operations
 	Notice the name is "ActionNode" not "StateNode" since we are interested
 	in the specific action take from a state
 	"""
@@ -224,7 +224,7 @@ def mcts_search(root_state: torch.Tensor, color: int, simulations=1600):
 	selected_child = root.children[child_index]
 
 	# Save this state for training
-	save_training_sample(root, root.val, selected_child)
+	save_training_sample(root, selected_child, root.val)
 
 	# Return the child 
 	return selected_child
@@ -299,8 +299,9 @@ def terminal_routine(node):
 	""" 
 	node.backpropogate()
 
-def save_training_sample(root, root_val, root_action): 
+def save_training_sample(root, root_action, root_val): 
 	"""
-	Saves the sample for training inside a file 
+	Saves the sample for training inside a file. 
 	"""
+	with open("game_state")
 	return 

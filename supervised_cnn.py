@@ -1,5 +1,9 @@
-# Credits to CS 444: Deep Learning for Computer Vision for a lot of the framework for me to get started on this project
-# i.e. what kind of objects were needed, which steps I needed to take to have a functioning CNN :>
+"""
+This file is the exact same as a_cnn.py inside CNN folder. 
+This file remains the same because in the supervised architecture we 
+do not train the value network. The value network only is enforced 
+when we are doing self play. 
+"""
 
 from contextlib import nullcontext
 import xml.etree.ElementTree as ET
@@ -255,7 +259,7 @@ def prepare_dataloader(dataset: Dataset):
 I was planning on implementing Conv2d and MaxPool2d the way I did it on the 444 MP
 But I realized my layer implementation are probably shit so decided not to do that lel
 """
-class CNN(nn.Module): 
+class S_CNN(nn.Module): 
 	"""
 	Wrap the CNN in the torch nn module to inherit the module properties
 	"""
@@ -309,7 +313,7 @@ class CNN(nn.Module):
 		return x 
 
 #### TRAINING AND EVALUATION ####
-class TRAIN(): 
+class S_TRAIN(): 
 	"""
 	Defines the training class with the necessary eval and train function	
 	"""
@@ -463,47 +467,3 @@ def plot_train_acc(history):
 	ax.legend()
 	fig.tight_layout() # shows the labels I've defined
 	return fig, ax
-
-#### MAIN ####
-def main(rank: int, world_size: int, total_epochs: int): 
-	# Initialize DDP group
-	ddp_setup(rank, world_size)
-	# Organize game data: 
-	organize_games('renjunet_v10_20180803.xml')
-	# dataset, and wrap into dataloader
-	train_loader = prepare_dataloader(GameDataset(root='dataset', split='training'))
-	# Initialize model
-		# Note: No .to(device), this I moved to training class initialization
-	model = CNN()
-	# Create Training instance
-	train = TRAIN(
-				rank,
-				model, 
-				lr=0.0001, 
-				gamma=0.9, 
-				optimizer=torch.optim.Adam(model.parameters(), 
-				lr=0.0001), 
-				criterion=nn.CrossEntropyLoss(), 
-				train_loader=train_loader
-			)	
-	# Train the model 
-	history = train.train(n_epochs=10)
-	# Save the trained weights -- could u pickle, but pytorch was more sigma
-	torch.save(model.state_dict(), 'model_weigths_transform.pth')
-	# Destroy the process
-	destroy_process_group()
-
-if __name__ == "__main__": 
-	"""
-	Begins the training process
-	"""
-	# import sys
-	# total_epochs = int(sys.argv[1])
-	# world_size = torch.cuda.device_count()
-	# # mp.spawn: 
-	# #	1. Creates n processes, where each process is assigned to a GPU
-	# #	2. Each process gets a rank, id, range: 0,..., nprocs-1
-	# # By design mp.spawn MUST call some main function
-	# # By design it WILL pass rank as first arg, and args in order
-	# mp.spawn(main, args=(world_size, total_epochs), nprocs=world_size)
-	organize_games('renjunet_v10_20180803.xml')

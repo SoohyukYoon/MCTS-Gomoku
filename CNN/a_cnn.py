@@ -497,13 +497,13 @@ if __name__ == "__main__":
 	"""
 	Begins the training process
 	"""
-	# import sys
-	# total_epochs = int(sys.argv[1])
-	# world_size = torch.cuda.device_count()
-	# # mp.spawn: 
-	# #	1. Creates n processes, where each process is assigned to a GPU
-	# #	2. Each process gets a rank, id, range: 0,..., nprocs-1
-	# # By design mp.spawn MUST call some main function
-	# # By design it WILL pass rank as first arg, and args in order
-	# mp.spawn(main, args=(world_size, total_epochs), nprocs=world_size)
+	import sys
+	total_epochs = int(sys.argv[1])
+	world_size = torch.cuda.device_count()
+	# mp.spawn: 
+	#	1. Creates n processes, where each process is assigned to a GPU
+	#	2. Each process gets a rank, id, range: 0,..., nprocs-1
+	# By design mp.spawn MUST call some main function
+	# By design it WILL pass rank as first arg, and args in order
+	mp.spawn(main, args=(world_size, total_epochs), nprocs=world_size)
 	organize_games('renjunet_v10_20180803.xml')
