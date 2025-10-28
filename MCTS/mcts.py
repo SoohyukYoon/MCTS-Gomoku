@@ -76,7 +76,6 @@ class MCTSNode:
 	# Check for winner in Gomoku 
 	def check_winner(self): 
 		if self.action == None: 
-			#print("No Self Action")
 			return None
 		dirs = ((1, 0), (0, 1), (1, 1), (1, -1))
 		player = 3 - self.get_current_player()
@@ -88,10 +87,7 @@ class MCTSNode:
 				rowStep = dir[0]
 				colStep = dir[1]
 				curRow = (self.action // 7) + rowStep * sgn
-				# self.action[0] + rowStep * sgn
 				curCol = (self.action % 7) + colStep * sgn
-				# self.action[1] + colStep * sgn
-				# print("Coords: ", curRow, curCol)
 				if (curRow >= 7 or curRow < 0) or (curCol >= 7 or curCol < 0):
 					continue
 				while self.state[curRow * 7 + curCol] == player: 
@@ -104,7 +100,6 @@ class MCTSNode:
 						break 
 			# print(len(winningCells))
 			if len(winningCells) == 4: 
-				# print("WINNER IS: ", player, "at ", self.action)
 				return player
 		return None
 			

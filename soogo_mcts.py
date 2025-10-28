@@ -1,8 +1,6 @@
-# Credit to GeeksForGeeks for the framework, though everything needed to be reworked 
 # Reminder this is an action node, we do not have nodes for storing states
 
 from typing import Any
-
 
 from soogo_cnn import CNN
 
@@ -35,7 +33,6 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 import os 
-
 
 class ActionNode:
 	"""
@@ -128,6 +125,54 @@ class ActionNode:
 			node.Q = node.W / node.N
 			z = -z
 
+	def terminal(self): 
+		"""Returns if the game has come to an end""" 
+		return self.check_winner() or self.no_moves_left()
+	
+	def check_winner(self): 
+		"""
+		Checks if there is a winner in the game based on the current state, new_s, 
+		by checking for a 5 in a row in the four possible configurations we can find it in
+		Return: 
+			boolean: True if there is winner, False if there is no winner
+		"""
+		# Edge case for root node without action
+		if self.action == None: 
+			return None
+		dirs = ((1, 0), (0, 1), (1, 1), (1, -1))
+		color = self.color
+
+		for dir in dirs: 
+			winningCells = [[self.action[0], self.action[1]]]
+			for sgn in (1, -1): 
+				rowStep = dir[0]
+				colStep = dir[1]
+				curRow = self.action[0] + rowStep * sgn
+				curCol = self.action[1] + colStep * sgn
+				if (curRow >= 15 or curRow < 0) or (curCol >= 15 or curCol < 0):
+					continue
+				while self.new_s[color, curRow, curCol] == 1: 
+					winningCells.append([curRow, curCol])
+					if len(winningCells) > 4: 
+						return None
+					curRow += rowStep * sgn
+					curCol += colStep * sgn
+					if (curRow >= 7 or curRow < 0) or (curCol >= 7 or curCol < 0): 
+						break 
+			if len(winningCells) == 5: 
+				return True
+		return False
+
+	def no_moves_left(self): 
+		"""
+		Checks if there are no more moves left to play, 
+		by checking that all the empty state board is 0.
+		Return: 
+			boolean: True if board is full, False is board is not full
+		"""
+		empty_state = self.new_s[2]
+		return torch.all(empty_state == 0)
+
 
 # Initialize our device 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -157,7 +202,11 @@ def mcts_search(root_state: torch.Tensor, color: int, simulations=1600):
 			best_child = best_child.get_bestchild()
 		
 		# Expand from best_child 
-		node.expand()
+		if node.terminal(): 
+			terminal_routine(node)
+			continue
+		else: 
+			node.expand()
 
 		# Select best child from this expansion 
 		best_child = node.get_bestchild() 
@@ -172,9 +221,13 @@ def mcts_search(root_state: torch.Tensor, color: int, simulations=1600):
 	
 	# Select a child from a distribution 
 	child_index = select_child(generate_distribution(root.children))
+	selected_child = root.children[child_index]
+
+	# Save this state for training
+	save_training_sample(root, root.val, selected_child)
 
 	# Return the child 
-	return root.children[child_index]
+	return selected_child
 		
 def load_and_eval(model): 
 	print("Model initialized!")
@@ -239,6 +292,15 @@ def select_child(dist):
 			return m 
 	return r 
 
+def terminal_routine(node):
+	"""
+	If node is the terminal node do not expand 
+	and back prop
+	""" 
+	node.backpropogate()
 
-
-	
+def save_training_sample(root, root_val, root_action): 
+	"""
+	Saves the sample for training inside a file 
+	"""
+	return 
