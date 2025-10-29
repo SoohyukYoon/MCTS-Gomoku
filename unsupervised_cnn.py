@@ -238,19 +238,21 @@ class U_TRAIN():
 			self.model.module.train()
 			total_loss = 0 
 			# After each epoch train_loader is reshuffled
-			for (states, actions) in (self.train_loader): 
+			for (states, policies, values) in (self.train_loader): 
 				# 0. Prepare data by moving it to GPU
-				states, actions = states.to(self.gpu_id), actions.to(self.gpu_id)
+				states, policies, values = states.to(self.gpu_id), policies.to(self.gpu_id), values.to(self.gpu_id)
 				# 1. Clear previous Gradient, we don't want old gradient contributing again
 				self.optimizer.zero_grad()
 				# 2. Forward pass the states
-				output = self.model.module(states)
+				out_policies, out_values = self.model.module(states)
 				# 3. Calculate the loss
 				#	actions does not need to be an indicator matrix, in torch merely providing the index is enough
-				loss = self.criterion(output, actions)
-				total_loss += loss
+				loss_policy = self.policy_criterion(out_policies, policies)
+				loss_value = self.value_criterion(out_values, values)
+				total_loss = loss_policy + loss_value
 				# 4. Calculate all the Gradients, pytorch just does all this, it's like...magic
-				loss.backward()
+				# Tech can do loss_policy.backward() and loss_value.backward(), bc the gradients are independent. but this approach is cleaner
+				total_loss.backward()
 				# 5. Updates the weights with out Gradients, completing the backpropogation
 				#		Note: criterion and optimizer are different functions, but both share the same common parameters 
 				self.optimizer.step()
