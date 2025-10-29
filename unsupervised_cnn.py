@@ -82,7 +82,7 @@ class U_GameDataset(Dataset):
 		return state, action, value
 
 #### DATALOADER ####
-def prepare_dataloader(dataset: Dataset): 
+def u_prepare_dataloader(dataset: Dataset): 
 	return DataLoader(
 		dataset, 
 		batch_size=8, # SGD since AlphaGo paper says "to minimize end-to-end evaluation time" but hopefully results are not so bad even with batch 1 

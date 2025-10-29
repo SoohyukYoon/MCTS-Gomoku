@@ -61,7 +61,40 @@ def unsupervised_train(rank: int, world_size: int, total_epochs: int, total_game
 	# Initialize DDP group
 	ddp_setup(rank, world_size)
 
+	model = load_supervised_weights()
+
+	# Create Training instance
+	train = create_train_instance(rank, model)
+
+	# Self play to train weights
+	tot_history = selfplay_mcts(train, total_games)
+
+	# Print the loss graph 
+	plot_train_loss(tot_history)
+
+	# Save the trained weights -- could use pickle, but pytorch was more sigma
+	torch.save(model.state_dict(), 'unsupervised_weights.pth')
+	# Destroy the process
+	destroy_process_group()
+
+#### HELPERS FUNCTIONS FOR UNSUPERVISED TRAINING ####
+def append_value(game_list): 
 	"""
+	Appends the winner into each game move 
+	Args: 
+		game_list: list of moves played in the game
+	"""
+	value = 1
+	for i in range(len(game_list)): 
+		game_list[i].append(value)
+		value = -value
+
+def load_supervised_weights():
+	"""
+	Loads the supervised weights into the unsupervised models 
+	Return: 
+		model: Unsupervised model that has been updated with the supervised models weights
+
 	model.load_state_dict(torch.load('supervised_weights.pth', weights_only=True)) FAILS --- 
 	since the model is not the same this is going to cause error -- need to manually set the dictionary.
 
@@ -114,8 +147,10 @@ def unsupervised_train(rank: int, world_size: int, total_epochs: int, total_game
 	# Load the modified state dict of U_CNN 
 	model.load_state_dict(unsupervised_state)
 
-	# Create Training instance
-	train = U_TRAIN(
+	return model 
+
+def create_train_instance(rank, model): 
+	return U_TRAIN(
 				rank,
 				model, 
 				lr=0.0001, 
@@ -126,8 +161,14 @@ def unsupervised_train(rank: int, world_size: int, total_epochs: int, total_game
 				value_criterion=nn.MSELoss()
 			)	
 
+def selfplay_mcts(train: U_TRAIN=None, total_games: int=10000): 
 	"""
-	The meat of where everything comes together
+	The meat of where self play from MCTS occurs
+	Args: 
+		train: Train instance that has model and relevant functions for training
+		tota_games: Total number of games we will train the model on 
+	Return: 
+		tot_history: Contains a list of the loss that has occured throughout slef-play training
 	"""
 	max_moves = 225
 	tot_history = []
@@ -147,7 +188,7 @@ def unsupervised_train(rank: int, world_size: int, total_epochs: int, total_game
 
 		# Loop over the moves being played in game g
 		for m in range(max_moves):
-			child = mcts_search(model, state, color, simulations=1600)
+			child = mcts_search(train.model, state, color, simulations=1600)
 			state[color, child.action // 15, child.action % 15] = 1 
 			state[2, child.action // 15, child.action % 15] = 0 
 			color = (color + 1) % 2
@@ -158,25 +199,11 @@ def unsupervised_train(rank: int, world_size: int, total_epochs: int, total_game
 				break 
 
 		# Update the dataloader to refresh with new U_MoveDataset
-		train.train_loader = prepare_dataloader(game_list)
+		train.train_loader = u_prepare_dataloader(game_list)
 		
 		# From the moves played in the game train the model 
 		history = train.train(n_epochs=10)
 		tot_history.append(history)
-
-	# Print the loss graph 
-	plot_train_loss(tot_history)
-
-	# Save the trained weights -- could use pickle, but pytorch was more sigma
-	torch.save(model.state_dict(), 'unsupervised_weights.pth')
-	# Destroy the process
-	destroy_process_group()
-
-def append_value(game_list): 
-	value = 1
-	for i in range(len(game_list)): 
-		game_list[i].append(value)
-		value = -value
 
 if __name__ == "__main__": 
 	"""
