@@ -79,13 +79,13 @@ def unsupervised_train(total_epochs: int, total_games: int, rank: int=None, worl
 	print("Completed Supervised Training")
 
 #### HELPERS FUNCTIONS FOR UNSUPERVISED TRAINING ####
-def append_value(game_list): 
+def append_value(game_list, winner): 
 	"""
 	Appends the winner into each game move 
 	Args: 
 		game_list: list of moves played in the game
 	"""
-	value = 1
+	value = 1 if winner != -1 else 0
 	for i in range(len(game_list)): 
 		game_list[i].append(value)
 		value = -value
@@ -132,7 +132,8 @@ def load_supervised_weights(rank):
 	"""
 	# Note: No .to(device), this I moved to training class initialization
 	# DDP_CHANGED : to.device('cpu') 
-	model = U_CNN().to('cpu')
+	device = torch.device('cpu')
+	model = U_CNN().to(device)
 	if rank: 
 		supervised_state = torch.load('supervised_weights.pth', weights_only=True)
 	else: 
@@ -192,23 +193,25 @@ def selfplay_mcts(train: U_TRAIN=None, total_games: int=10000):
 		state_e = torch.ones(15, 15)
 		state = torch.stack([state_b, state_w, state_e])
 
-		# Initialize starting color to black 
+		# Initialize starting color to black and winner
 		color = 0
+		winner = -1
 
 		# Initialize a game list that we will feed into training
 		game_list = []
 
 		# Loop over the moves being played in game g
-		for m in range(max_moves):
+		for m in tqdm(range(max_moves - 220)):
 			child = mcts_search(train.model, state, color, simulations=10)
 			state[color, child.a[0], child.a[1]] = 1 
 			state[2, child.a[0], child.a[1]] = 0 
 			color = (color + 1) % 2
 			game_list.append([state, child.a])
 			if child.is_winner(): 
-				# Append value to each move 
-				append_value(game_list) 
 				break 
+
+		# Append value to each move 
+		append_value(game_list, winner) 
 		
 		# Set the model to train
 		train.model.train()

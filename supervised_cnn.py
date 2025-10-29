@@ -59,7 +59,6 @@ def organize_games(root, transform=True):
 			Input: the state of the game before the action
 					the input is 3 dimensional, one-hot encoding, of black, white, and empty
 	"""
-
 	# Data on training input
 	game_count = 0 
 	state_count = 0 
@@ -401,7 +400,7 @@ class S_TRAIN():
 			self.model.module.train()
 			total_loss = 0 
 			# After each epoch train_loader is reshuffled
-			for (states, actions) in (self.train_loader): 
+			for states, actions in self.train_loader: 
 				# 0. Prepare data by moving it to GPU
 				states, actions = states.to(self.gpu_id), actions.to(self.gpu_id)
 				# 1. Clear previous Gradient, we don't want old gradient contributing again

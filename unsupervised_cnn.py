@@ -76,6 +76,7 @@ class U_GameDataset(Dataset):
 		# initialization once, at the start of the simulation, but for action I constantly need 
 		# to re-initialize to a torch.long because expand is a for loop on i -- slight optimization like a pro :>
 		action = torch.tensor(action, dtype=torch.long) 
+		value = torch.tensor(value, dtype=torch.float32)
 
 		# Cool thing: .array(): creates 3 seperate (225) tensors
 		#			  .stack(): creates a single (3, 225) tensor
@@ -90,7 +91,8 @@ def u_prepare_dataloader(dataset: Dataset):
 			# Why data gets corrupted makes no sense --- Gemini for 
 		shuffle=False,
 		# Include Distributed Sampler: Ensures that samples are chunked without overlapping samples
-		sampler = DistributedSampler(dataset)
+		# DDP_CHANGED
+		# sampler = DistributedSampler(dataset)
 	)
 
 #### CONVOLUTIONAL NEURAL NETWORKS #### 
@@ -169,7 +171,7 @@ class U_TRAIN():
 	Realize during training for selfplay the value is only either -1 or 1, and that is how we update it
 	"""
 
-	def __init__(self, model, lr, gamma, policy_criterion, value_criterion, optimizer, gpu_id='cpu', train_loader=None, valid_loader=None): 
+	def __init__(self, model, lr, gamma, policy_criterion, value_criterion, optimizer, gpu_id=torch.device('cpu'), train_loader=None, valid_loader=None): 
 		"""
 		Initializes the class
 		Args: 
@@ -188,7 +190,9 @@ class U_TRAIN():
 		# Wrap in DDP such that our trained model can be distributed across GPUs
 			# device_ids: consists of a list of IDs the GPUs live on 
 			# Since self.model refers to the DDP wrapped object we need to add .module to access model parameters
-		self.model = DDP(model, device_ids=[self.gpu_id]) if gpu_id != 'cpu' else model.to(gpu_id)
+		# DDP_CHANGED -- 
+		# DDP(model, device_ids=[self.gpu_id]) 
+		self.model = model
 		self.train_loader = train_loader
 		self.valid_loader = valid_loader
 		self.lr = lr 
@@ -245,25 +249,28 @@ class U_TRAIN():
 			}
 		i = 0 
 		for epoch in tqdm(range(n_epochs)): 
-			print(f"[GPU{self.gpu_id}] Epoch {epoch} | Batchsize: {self.batch_size} | Steps: {len(self.train_data)}")
+			print(f"[GPU{self.gpu_id}] Epoch {epoch} | Batchsize: {self.train_loader.batch_size} | Steps: {len(self.train_loader)}")
 			# Sets the model to training mode: part of nn.Module
 			#		We get the perks of automatic 1) dropout 2) batchnormalization, talked about in class but lowkey forget 
 			#		Note: Either way even if not call .train() it gets called by default, but necessary
 			#			  to call bc if we call .eval() then train again, eval removes dropout and batch normalization leading
 			#			  to pretty shitty overfitted results.
-			self.model.module.train()
+			# DDP_CHANGED
+			self.model.train()
 			total_loss = 0 
 			# After each epoch train_loader is reshuffled
-			for (states, policies, values) in self.train_loader: 
+			for states, actions, values in self.train_loader: 
+				print(type(actions))
 				# 0. Prepare data by moving it to GPU
-				states, policies, values = states.to(self.gpu_id), policies.to(self.gpu_id), values.to(self.gpu_id)
+				states, actions, values = states.to(self.gpu_id), actions.to(self.gpu_id), values.to(self.gpu_id)
 				# 1. Clear previous Gradient, we don't want old gradient contributing again
 				self.optimizer.zero_grad()
 				# 2. Forward pass the states
-				out_policies, out_values = self.model.module(states)
+				# DDP_CHANGED
+				out_policies, out_values = self.model(states)
 				# 3. Calculate the loss
 				#	actions does not need to be an indicator matrix, in torch merely providing the index is enough
-				loss_policy = self.policy_criterion(out_policies, policies)
+				loss_policy = self.policy_criterion(out_policies, actions)
 				loss_value = self.value_criterion(out_values, values)
 				total_loss = loss_policy + loss_value
 				# 4. Calculate all the Gradients, pytorch just does all this, it's like...magic

@@ -196,7 +196,7 @@ def mcts_search(model, root_state: torch.Tensor, color: int, simulations=1600):
 	root.backpropogate()
 
 	# Run by default 1600 simulations to decide which child to select
-	for s in tqdm(range(simulations)): 
+	for s in range(simulations): 
 		node = root 
 
 		# Get the leaf child
@@ -230,7 +230,6 @@ def mcts_search(model, root_state: torch.Tensor, color: int, simulations=1600):
 	# Select a child from a distribution 
 	child_index = select_child(generate_distribution(root.children))
 	selected_child = root.children[child_index]
-	print(selected_child.a)
 	select_child_action = (selected_child.a[0] * 15) + selected_child.a[1]
 
 	# Return the child 
