@@ -24,6 +24,17 @@ model.eval()
 model_t = CNN().to(device)
 print("Model initialized!")
 # weights_only: security, if you use internet models might have malicious code, so only extracts the weights
+"""
+map_location: controls where the file data gets loaded to -- important to torch.device(__device_name__), 
+	since the weights were originally saved on a GPU so the weights would try be loaded on a non-existent GPU.
+	But in this case since our weights are saved and loaded from a GPU we do not need it, but important to have in play. 
+
+torch.load(, weights_only=True): loads a pytorch object, and only the weights
+
+.load_state_dict(): copies the loaded parameters into the model 
+
+Note: A lot of details are missing, but this level of understanding for now is enoguh 
+"""
 model_t.load_state_dict(torch.load('model_weights_transform.pth', weights_only=True, map_location=torch.device('cpu'))) 
 # Set to eval mode to play 
 model_t.eval()

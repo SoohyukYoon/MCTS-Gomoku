@@ -274,27 +274,27 @@ class S_CNN(nn.Module):
 
 		self.layers = nn.Sequential(
 				# Layer 1: 5x5 Kernel
-				nn.Conv2d(3, channels, 5, 1, 2),
+				nn.Conv2d(3, channels, 5, 1, 2, bias=False),
 				nn.ReLU(),
 
 				# Layer 2: 3x3 Kernel 
-				nn.Conv2d(channels, channels, 3, 1, 1),
+				nn.Conv2d(channels, channels, 3, 1, 1, bias=False),
 				nn.ReLU(),
 
 				# Layer 3: 3x3 Kernel 
-				nn.Conv2d(channels, channels, 3, 1, 1),
+				nn.Conv2d(channels, channels, 3, 1, 1, bias=False),
 				nn.ReLU(),
 
 				# Layer 4: 3x3 Kernel 
-				nn.Conv2d(channels, channels, 3, 1, 1),
+				nn.Conv2d(channels, channels, 3, 1, 1, bias=False),
 				nn.ReLU(),
 
 				# Layer 5: 3x3 Kernel 
-				nn.Conv2d(channels, channels, 3, 1, 1),
+				nn.Conv2d(channels, channels, 3, 1, 1, bias=False),
 				nn.ReLU(),
 
 				# Layer 6: 1x1 Kernel 
-				nn.Conv2d(channels, 1, 1, 1, 0),
+				nn.Conv2d(channels, 1, 1, 1, 0, bias=False),
 
 				# Flatten: Must do because CrossEntropy requires a single vector
 				nn.Flatten()

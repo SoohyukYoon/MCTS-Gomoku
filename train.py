@@ -60,13 +60,63 @@ def unsupervised_train(rank: int, world_size: int, total_epochs: int, total_game
 	for g in range(total_games):
 		# Initialize DDP group
 		ddp_setup(rank, world_size)
-		# Organize game data: 
-		organize_games('renjunet_v10_20180803.xml')
+		
 		# dataset, and wrap into dataloader
 		train_loader = prepare_dataloader(GameDataset(root='dataset', split='training'))
-		# Initialize model
+		
+		"""
+		model.load_state_dict(torch.load('supervised_weights.pth', weights_only=True)) FAILS --- 
+		since the model is not the same this is going to cause error -- need to manually set the dictionary.
+
+		.state_dict(): maps the parameter names to their respective tensor values(the weights and biases). 
+			Important note is this is not the actual architecture, rather it is the architecture in dictionary 
+			form. We want to get this dictionary, such that we can modify its weights so that we can load 
+			this dictionary back into the model to update its architecture using .load_state_dict()
+
+			The returned dictionary has the following format, i.e. in the case of U_CNN(): 
+			Update: Since I disabled bias in actuality there should be no '.bias', but 
+			I am still going to keep the example below for generality
+			{
+				'backbone.0.weight': tensor([...]),
+				'backbone.0.bias': tensor([...]),
+				'backbone.2.weight': tensor([...]),
+				'backbone.2.bias': tensor([...]),
+				...
+				'policy_network.0.weight: tensor([...]),
+				'policy_network.0.bias: tensor([...]),
+				'policy_network.1.weight: tensor([...]),
+				'policy_network.1.bias: tensor([...]),
+				'value_network.0.weight: tensor([...]),
+				'value_network.0.bias: tensor([...]),
+				'value_network.1.weight: tensor([...]),
+				'value_network.1.bias: tensor([...])
+			}
+			Note: Notice that backbone excludes the odd layers, this is because it is ReLu --- state_dict only
+				outputs learnable parameters, and since RELU is completely deterministic based on Conv it is excluded
+
+				It's also weird I am even using a bias because I don't set any bias so I guess it's just adding 
+				bullshit the entire time. Updated: Bias disabled
+
+				No need to change anything for value_network since that is not part of the S_CNN
+		"""
 		# Note: No .to(device), this I moved to training class initialization
 		model = U_CNN()
+		supervised_state = torch.load('supervised_weights.pth', weights_only=True)
+		unsupervised_state = model.state_dict()
+
+		# By default just doing network.number without weight or bias implies both, 
+		# in our case we have no bias, but it still works
+		for i in range(5): 
+			backbone_key = f'backbone.{i*2}' # get the conv layer key, at the even index bc ReLu
+			supervised_key = f'layer.{i*2}'  
+			unsupervised_state[backbone_key] = supervised_key
+
+		# Here I make .weight explicit just as sake of example
+		unsupervised_state['supervised_network.0.weight'] = supervised_state['layer.11.weight']
+
+		# Load the modified state dict of U_CNN 
+		model.load_state_dict(unsupervised_state)
+
 		# Create Training instance
 		train = U_TRAIN(
 					rank,
@@ -82,7 +132,7 @@ def unsupervised_train(rank: int, world_size: int, total_epochs: int, total_game
 		# Train the model 
 		history = train.train(n_epochs=10)
 
-	# Save the trained weights -- could u pickle, but pytorch was more sigma
+	# Save the trained weights -- could use pickle, but pytorch was more sigma
 	torch.save(model.state_dict(), 'unsupervised_weights.pth')
 	# Destroy the process
 	destroy_process_group()
