@@ -200,18 +200,19 @@ def mcts_search(model, root_state: torch.Tensor, color: int, simulations=1600):
 		node = root 
 
 		# Get the leaf child
-		i = 0 
-		print("204", node.child_Ps[:3])
 		while node.get_bestchild(): 
-			print(i)
 			node = node.get_bestchild()
-			i += 1
-		print("209", node)
 		
-		# Expand from lead node 
+		# Expand from leaf node 
 		if node.terminal():
 			terminal_routine(node)
 			continue
+		elif not node.child_Ps: 
+			probs, val = model(node.new_s)
+			node.v = val.item()
+			node.child_Ps = probs.tolist()[0]
+			node.backpropogate()
+			node.expand()
 		else: 
 			node.expand()
 
@@ -222,7 +223,6 @@ def mcts_search(model, root_state: torch.Tensor, color: int, simulations=1600):
 		probs, val = model(best_child.new_s)
 		best_child.v = val.item()
 		best_child.child_Ps = probs.tolist()[0]
-		print("221", best_child.child_Ps[:3])
 
 		# Backpropogate on best_child 
 		best_child.backpropogate()
