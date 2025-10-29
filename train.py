@@ -47,7 +47,7 @@ def supervised_train(rank: int, world_size: int, total_epochs: int):
 	print("Completed Supervised Training")
 
 #### UNSUPERVISED SECTION ####
-def unsupervised_train(rank: int, world_size: int, total_epochs: int, total_games: int): 
+def unsupervised_train(total_epochs: int, total_games: int, rank: int=None, world_size: int=None): 
 	"""
 	main training routing for unsupervised learning
 	Args: 
@@ -55,11 +55,12 @@ def unsupervised_train(rank: int, world_size: int, total_epochs: int, total_game
 		world_size: number og GPUs available
 		total_epochs: number of epochs we train our data on 
 	"""
-	print("Beginning Supervised Training")
+	print("Beginning Unupervised Training")
 	# Initialize DDP group
-	ddp_setup(rank, world_size)
+	if rank and world_size: 
+		ddp_setup(rank, world_size)
 
-	model = load_supervised_weights()
+	model = load_supervised_weights(rank)
 
 	# Create Training instance
 	train = create_train_instance(rank, model)
@@ -73,7 +74,8 @@ def unsupervised_train(rank: int, world_size: int, total_epochs: int, total_game
 	# Save the trained weights -- could use pickle, but pytorch was more sigma
 	torch.save(model.state_dict(), 'unsupervised_weights.pth')
 	# Destroy the process
-	destroy_process_group()
+	if rank and world_size: 
+		destroy_process_group()
 	print("Completed Supervised Training")
 
 #### HELPERS FUNCTIONS FOR UNSUPERVISED TRAINING ####
@@ -88,7 +90,7 @@ def append_value(game_list):
 		game_list[i].append(value)
 		value = -value
 
-def load_supervised_weights():
+def load_supervised_weights(rank):
 	"""
 	Loads the supervised weights into the unsupervised models 
 	Return: 
@@ -130,18 +132,19 @@ def load_supervised_weights():
 	"""
 	# Note: No .to(device), this I moved to training class initialization
 	model = U_CNN()
-	supervised_state = torch.load('supervised_weights.pth', weights_only=True)
+	if rank: 
+		supervised_state = torch.load('supervised_weights.pth', weights_only=True)
+	else: 
+		supervised_state = torch.load('supervised_weights.pth', weights_only=True, map_location=torch.device('cpu'))
 	unsupervised_state = model.state_dict()
 
-	# By default just doing network.number without weight or bias implies both, 
-	# in our case we have no bias, but it still works
+	# you NEED to make explicit the entire key, name.number.weight_or_bias
 	for i in range(5): 
-		backbone_key = f'backbone.{i*2}' # get the conv layer key, at the even index bc ReLu
-		supervised_key = f'layer.{i*2}'  
-		unsupervised_state[backbone_key] = supervised_key
+		backbone_key = f'backbone.{i*2}.weight' # get the conv layer key, at the even index bc ReLu
+		supervised_key = f'layers.{i*2}.weight'  
+		unsupervised_state[backbone_key] = supervised_state[supervised_key]
 
-	# Here I make .weight explicit just as sake of example
-	unsupervised_state['supervised_network.0.weight'] = supervised_state['layer.11.weight']
+	unsupervised_state['policy_network.0.weight'] = supervised_state['layers.10.weight']
 
 	# Load the modified state dict of U_CNN 
 	model.load_state_dict(unsupervised_state)
@@ -149,15 +152,21 @@ def load_supervised_weights():
 	return model 
 
 def create_train_instance(rank, model): 
+	"""
+	Creates training instance
+	Args: 
+		rank: Id of GPU, RIGHT NOW IT IS NOT USED FOR TESTING ON CPU
+		model: Model we are training with 
+	Return
+		U_TRAIN
+	"""
 	return U_TRAIN(
-				rank,
 				model, 
 				lr=0.0001, 
 				gamma=0.9, 
-				optimizer=torch.optim.Adam(model.parameters(), 
-				lr=0.0001), 
 				policy_criterion=nn.CrossEntropyLoss(), 
-				value_criterion=nn.MSELoss()
+				value_criterion=nn.MSELoss(), 
+				optimizer=torch.optim.Adam(model.parameters(), lr=0.0001)
 			)	
 
 def selfplay_mcts(train: U_TRAIN=None, total_games: int=10000): 
@@ -173,6 +182,9 @@ def selfplay_mcts(train: U_TRAIN=None, total_games: int=10000):
 	tot_history = []
 	# Loop over the total number of games we are going to train on 
 	for g in range(total_games):
+
+		# Set the model to eval to prevent gradients flowing back
+		train.model.eval()
 		# Initialize an empty board
 		state_b = torch.zeros(15, 15)
 		state_w = torch.zeros(15, 15)
@@ -187,16 +199,18 @@ def selfplay_mcts(train: U_TRAIN=None, total_games: int=10000):
 
 		# Loop over the moves being played in game g
 		for m in range(max_moves):
-			child = mcts_search(train.model, state, color, simulations=1600)
-			state[color, child.action // 15, child.action % 15] = 1 
-			state[2, child.action // 15, child.action % 15] = 0 
+			child = mcts_search(train.model, state, color, simulations=10)
+			state[color, child.a[0], child.a[1]] = 1 
+			state[2, child.a[0], child.a[1]] = 0 
 			color = (color + 1) % 2
-			game_list.append([state, child.action])
+			game_list.append([state, child.a])
 			if child.is_winner(): 
 				# Append value to each move 
 				append_value(game_list) 
 				break 
-
+		
+		# Set the model to train
+		train.model.train()
 		# Update the dataloader to refresh with new U_MoveDataset
 		train.train_loader = u_prepare_dataloader(game_list)
 		
@@ -213,6 +227,7 @@ if __name__ == "__main__":
 	# Check how many devices are available
 	import sys
 	world_size = torch.cuda.device_count()
+	print(f'world_size={world_size}')
 
 	#### SUPERVISED SECTION ####
 	"""
@@ -222,8 +237,8 @@ if __name__ == "__main__":
 		By design mp.spawn MUST call some main function
 		By design it WILL pass rank as first arg, and args in order
 	"""
-	supervised_epochs = 10
-	mp.spawn(supervised_train, args=(world_size, supervised_epochs), nprocs=world_size)
+	# supervised_epochs = 10
+	# mp.spawn(supervised_train, args=(world_size, supervised_epochs), nprocs=world_size)
 
 	#### UNSUPERVISED SECTION ####
 	"""
@@ -232,7 +247,11 @@ if __name__ == "__main__":
 		2) when creating U_CNN I also need to use ddp since that's going to be training
 	"""
 	unsupervised_epochs = 10 
-	mp.spawn(unsupervised_train, args=(world_size, unsupervised_epochs), nprocs=world_size)
+	total_games = 10 
+	if world_size != 0: 
+		mp.spawn(unsupervised_train, args=(world_size, unsupervised_epochs), nprocs=world_size)
+	else: 
+		unsupervised_train(unsupervised_epochs, total_games)
 	
 	print("Training complete")
 

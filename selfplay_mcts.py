@@ -41,21 +41,23 @@ class ActionNode:
 	"""
 	def __init__(self, 
 			parent: 'ActionNode'=None, 
-			action: tuple[torch.long, torch.long]=None, 
-			val: torch.float32=None,
-			prob: torch.float32=None, 
+			action: list[int]=None, 
+			val: float=None,
+			color: int=None,
+			prob: float=None, 
+			child_Ps: list[float]=None, 
 			new_state: torch.Tensor=None, 
 		):
 		self.parent = parent			  			# Parent action node
-		self.s = parent.new_s	 			 		# Features before action
+		self.s = parent.new_s if parent else None	# Features before action
 		self.a = action 						  	# Action taken from state s
-		self.color = (parent.color + 1) % 2			# Color of action a 
-		if new_state: 								# Features after action a
-			self.new_s = new_state 
+		self.color = (parent.color + 1) % 2	if parent else color	# Color of action a 
+		if parent: 								# Features after action a
+			self.new_s = self.update_state(self.s, self.a, self.color)		 
 		else:
-			self.new_s =  self.update_state(self.s, self.a, self.color)		
+			self.new_s =  new_state	
 		self.v = val								# Valuation of our current state 
-		self.child_Ps = None						# Probability vector of children 
+		self.child_Ps = child_Ps					# Probability vector of children 
 		self.P = prob						  		# Probability of chosing action a from action s 
 		self.W = 0							  		# Total value of taking action a from state s
 		self.N = 0						  			# Total number of times went from state s by action a 
@@ -85,44 +87,44 @@ class ActionNode:
 			best_child: ActionNode
 		"""
 		if self.children == []:
-			print("No children")
 			return None
 		# key: determines what metric to score child
 		# lambda: creates anonymous function with parameter child and calculates Custom UCB
 		return max(self.children, key=lambda child:
 				   child.Q +
-				   self.c * child.P * math.sqrt(self.N) / (1 + child.V))
+				   self.c * child.P * math.sqrt(self.N) / (1 + child.N))
 
 	def expand(self): 
 		"""
 		If the current node does not have children create its children
 		"""
 		for i, p in enumerate(self.child_Ps):
-			curr_state = self.new_state
-			action = tuple(i // 15, i % 5)
+			curr_state = self.new_s
+			action = [i // 15, i % 5]
 			next_color = (self.color + 1) % 2
 			new_state = self.update_state(curr_state, action, next_color)
 
 			self.children.append(ActionNode(
 									parent=self, 
-									action=tuple(i // 15, i % 5),  
+									action=action,  
 									prob=p, 
 									new_state=new_state
 									)
 								)
-
+		
 	def backpropogate(self): 
 		"""
 		Propogates leaf valuation from the leaf 
 		up to the root.
 		"""
 		node = self
-		z = self.val
+		z = self.v
 		while node: 
 			node.N += 1 
 			node.W += z
 			node.Q = node.W / node.N
 			z = -z
+			node = node.parent
 
 	def terminal(self): 
 		"""Returns if the game has come to an end""" 
@@ -184,25 +186,30 @@ def mcts_search(model, root_state: torch.Tensor, color: int, simulations=1600):
 	"""
 	# Call CNN on root to get probs and val 
 	probs, val = model(root_state)
+	val = val.item()
+	probs = probs.tolist()[0]
 
 	# Covers both cases: Empty game or middle of game
-	root = ActionNode(val=val, child_Ps=probs, new_state=root_state)
+	root = ActionNode(val=val, color=color, child_Ps=probs, new_state=root_state)
 	# Back propogate on the root: important, else root(summation(N)) == 0, 
 	# which makes the priors uninformative
 	root.backpropogate()
 
 	# Run by default 1600 simulations to decide which child to select
-	for s in simulations: 
+	for s in tqdm(range(simulations)): 
 		node = root 
 
 		# Get the leaf child
-		best_child = node.get_bestchild()
-		while best_child: 
-			node = best_child
-			best_child = best_child.get_bestchild()
+		i = 0 
+		print("204", node.child_Ps[:3])
+		while node.get_bestchild(): 
+			print(i)
+			node = node.get_bestchild()
+			i += 1
+		print("209", node)
 		
-		# Expand from best_child 
-		if node.terminal(): 
+		# Expand from lead node 
+		if node.terminal():
 			terminal_routine(node)
 			continue
 		else: 
@@ -212,9 +219,10 @@ def mcts_search(model, root_state: torch.Tensor, color: int, simulations=1600):
 		best_child = node.get_bestchild() 
 		
 		# Call CNN on the bestchild and update its parameters
-		probs, val = model(best_child)
-		best_child.val = val 
-		best_child.child_Ps = probs
+		probs, val = model(best_child.new_s)
+		best_child.v = val.item()
+		best_child.child_Ps = probs.tolist()[0]
+		print("221", best_child.child_Ps[:3])
 
 		# Backpropogate on best_child 
 		best_child.backpropogate()
@@ -222,13 +230,14 @@ def mcts_search(model, root_state: torch.Tensor, color: int, simulations=1600):
 	# Select a child from a distribution 
 	child_index = select_child(generate_distribution(root.children))
 	selected_child = root.children[child_index]
-	select_child_action = (select_child.a[0] * 15) + select_child.a[1]
+	print(selected_child.a)
+	select_child_action = (selected_child.a[0] * 15) + selected_child.a[1]
 
 	# Return the child 
 	return selected_child
 		
 def load_and_eval(model): 
-	model.load_state_dict(torch.load('soogo_weights.pth', map_location=torch.device(device))) 
+	model.load_state_dict(torch.load('soogo_weights.pth', map_location=torch.device('cpu'))) 
 	# Set to eval mode so that gradients don't flow back 
 	model.eval()
 

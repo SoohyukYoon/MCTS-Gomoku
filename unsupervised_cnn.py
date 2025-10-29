@@ -169,7 +169,7 @@ class U_TRAIN():
 	Realize during training for selfplay the value is only either -1 or 1, and that is how we update it
 	"""
 
-	def __init__(self, model, lr, gamma, policy_criterion, value_criterion, optimizer, gpu_id, train_loader=None, valid_loader=None): 
+	def __init__(self, model, lr, gamma, policy_criterion, value_criterion, optimizer, gpu_id='cpu', train_loader=None, valid_loader=None): 
 		"""
 		Initializes the class
 		Args: 
@@ -188,7 +188,7 @@ class U_TRAIN():
 		# Wrap in DDP such that our trained model can be distributed across GPUs
 			# device_ids: consists of a list of IDs the GPUs live on 
 			# Since self.model refers to the DDP wrapped object we need to add .module to access model parameters
-		self.model = DDP(model, device_ids=[self.gpu_id])
+		self.model = DDP(model, device_ids=[self.gpu_id]) if gpu_id != 'cpu' else model.to(gpu_id)
 		self.train_loader = train_loader
 		self.valid_loader = valid_loader
 		self.lr = lr 
@@ -244,7 +244,7 @@ class U_TRAIN():
 				'train_acc': []
 			}
 		i = 0 
-		for epoch in range(n_epochs): 
+		for epoch in tqdm(range(n_epochs)): 
 			print(f"[GPU{self.gpu_id}] Epoch {epoch} | Batchsize: {self.batch_size} | Steps: {len(self.train_data)}")
 			# Sets the model to training mode: part of nn.Module
 			#		We get the perks of automatic 1) dropout 2) batchnormalization, talked about in class but lowkey forget 
@@ -254,7 +254,7 @@ class U_TRAIN():
 			self.model.module.train()
 			total_loss = 0 
 			# After each epoch train_loader is reshuffled
-			for (states, policies, values) in (self.train_loader): 
+			for (states, policies, values) in self.train_loader: 
 				# 0. Prepare data by moving it to GPU
 				states, policies, values = states.to(self.gpu_id), policies.to(self.gpu_id), values.to(self.gpu_id)
 				# 1. Clear previous Gradient, we don't want old gradient contributing again
