@@ -2,7 +2,6 @@
 
 from typing import Any
 
-from soogo_cnn import CNN
 
 from contextlib import nullcontext
 import xml.etree.ElementTree as ET
@@ -33,11 +32,6 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 import os 
-
-# Prob need to get rid of this at some point and integrate ddp
-# Initialize our device 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"Using device: {device}")
 
 class ActionNode:
 	"""

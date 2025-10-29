@@ -50,7 +50,7 @@ def ddp_setup(rank, world_size):
 	# Include free port on machine 
 	os.environ["MASTER_PORT"] = "12344"
 	# For CUDA GPU communications --- initialize default DDP group
-	init_process_group(backend="nccl", rank=rank, world_size=world_size)
+	init_process_group(backend="gloo", rank=rank, world_size=world_size)
 
 def organize_games(root, transform=True):
 	"""
@@ -336,7 +336,7 @@ class S_TRAIN():
 		# Wrap in DDP such that our trained model can be distributed across GPUs
 			# device_ids: consists of a list of IDs the GPUs live on 
 			# Since self.model refers to the DDP wrapped object we need to add .module to access model parameters
-		self.model = DDP(self.model, device_ids=[self.gpu_id])
+		self.model = DDP(model, device_ids=[self.gpu_id])
 		self.train_loader = train_loader
 		self.valid_loader = valid_loader
 		self.lr = lr 

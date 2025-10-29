@@ -188,7 +188,7 @@ class U_TRAIN():
 		# Wrap in DDP such that our trained model can be distributed across GPUs
 			# device_ids: consists of a list of IDs the GPUs live on 
 			# Since self.model refers to the DDP wrapped object we need to add .module to access model parameters
-		self.model = DDP(self.model, device_ids=[self.gpu_id])
+		self.model = DDP(model, device_ids=[self.gpu_id])
 		self.train_loader = train_loader
 		self.valid_loader = valid_loader
 		self.lr = lr 

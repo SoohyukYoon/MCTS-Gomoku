@@ -5,12 +5,7 @@ Unified training routine for supervised and unsupervised
 from supervised_cnn import *
 from unsupervised_cnn import * 
 from selfplay_mcts import *
-import torch  
-from torch.utils.data import Dataset, DataLoader, ddp_set, prepare_dataloader
-import torch.nn as nn 
-import torch.nn.functional as F 
-import torchvision
-from torchvision import transforms as T
+
 import sys
 
 #### SUPERVISED SECTION ####
@@ -22,6 +17,7 @@ def supervised_train(rank: int, world_size: int, total_epochs: int):
 		world_size: number og GPUs available
 		total_epochs: number of epochs we train our data on 
 	"""
+	print("Beginning Supervised Training")
 	# Initialize DDP group
 	ddp_setup(rank, world_size)
 	# Organize game data: 
@@ -48,6 +44,7 @@ def supervised_train(rank: int, world_size: int, total_epochs: int):
 	torch.save(model.state_dict(), 'supervised_weights.pth')
 	# Destroy the process
 	destroy_process_group()
+	print("Completed Supervised Training")
 
 #### UNSUPERVISED SECTION ####
 def unsupervised_train(rank: int, world_size: int, total_epochs: int, total_games: int): 
@@ -58,6 +55,7 @@ def unsupervised_train(rank: int, world_size: int, total_epochs: int, total_game
 		world_size: number og GPUs available
 		total_epochs: number of epochs we train our data on 
 	"""
+	print("Beginning Supervised Training")
 	# Initialize DDP group
 	ddp_setup(rank, world_size)
 
@@ -76,6 +74,7 @@ def unsupervised_train(rank: int, world_size: int, total_epochs: int, total_game
 	torch.save(model.state_dict(), 'unsupervised_weights.pth')
 	# Destroy the process
 	destroy_process_group()
+	print("Completed Supervised Training")
 
 #### HELPERS FUNCTIONS FOR UNSUPERVISED TRAINING ####
 def append_value(game_list): 
@@ -203,12 +202,14 @@ def selfplay_mcts(train: U_TRAIN=None, total_games: int=10000):
 		
 		# From the moves played in the game train the model 
 		history = train.train(n_epochs=10)
-		tot_history.append(history)
+		tot_history.extend(history['train_loss'])
+	return tot_history
 
 if __name__ == "__main__": 
 	"""
 	Begins the training process
 	"""
+	print("Training start")
 	# Check how many devices are available
 	import sys
 	world_size = torch.cuda.device_count()
@@ -232,5 +233,7 @@ if __name__ == "__main__":
 	"""
 	unsupervised_epochs = 10 
 	mp.spawn(unsupervised_train, args=(world_size, unsupervised_epochs), nprocs=world_size)
+	
+	print("Training complete")
 
 
