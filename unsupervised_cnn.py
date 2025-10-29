@@ -1,6 +1,12 @@
 # Credits to CS 444: Deep Learning for Computer Vision for a lot of the framework for me to get started on this project
 # i.e. what kind of objects were needed, which steps I needed to take to have a functioning CNN :>
 
+"""
+TODO: Formatting for comments have changed since I decided to embedd data type inside 
+the function so I should probably get to that at some point since it looks 
+pretty disgusting right now lel 
+"""
+
 from contextlib import nullcontext
 import xml.etree.ElementTree as ET
 
@@ -32,7 +38,7 @@ from torch.distributed import init_process_group, destroy_process_group
 import os 
 
 #### DATASET #####
-class GameDataset(Dataset): 
+class U_GameDataset(Dataset): 
 	"""
 	Create class for Game Data: 
 		Wrap into torch object and split into train and validation groups
@@ -40,23 +46,21 @@ class GameDataset(Dataset):
 		batching, shuffling, and etc
 	"""
 
-	def __init__(self, root, split): 
+	def __init__(self, game_moves: torch.tensor): 
 		"""
+		In supervised_cnn.py I have a pickle file, but inside unsupervised_cnn.py
+		I am going to directly input a list since I am only passing one game at a time.
 		Args: 
-			root (str): The root directory of the dataset
-			split (str): Can be 'train', 'val', 'test'
+			game_moves: Moves played 
 		"""
-		self.root = root
-		self.split = split
-		with open(f"{root}/{split}.pkl", "rb") as f:  
-			self.game_states = pickle.load(f)
+		self.game_moves = game_moves 
 
 	def __len__(self): 
 		"""
 		Returns: 
 			The number of game states inside state_list
 		"""
-		return len(self.game_states)
+		return len(self.game_moves)
 
 	def __getitem__(self, idx): 
 		"""
@@ -66,16 +70,28 @@ class GameDataset(Dataset):
 			state (Tensor): The current board state before action
 			action (int): The action taken after the current board state
 		"""
-		states, action, value = self.game_states[idx]
-		state_b = torch.tensor(states[0], dtype=torch.float32)
-		state_w = torch.tensor(states[1], dtype=torch.float32)
-		state_e = torch.tensor(states[2], dtype=torch.float32)
-		action = torch.tensor(action, dtype=torch.long) # Must be torch.long for cross_entropy, class based 
-		value = torch.tensor(value, dtype=torch.float32)
+		state, action, value = self.game_moves[idx]
+		# Must be torch.long for cross_entropy, class based 
+		# I also decided to specfically convert here since all other values are converted on 
+		# initialization once, at the start of the simulation, but for action I constantly need 
+		# to re-initialize to a torch.long because expand is a for loop on i -- slight optimization like a pro :>
+		action = torch.tensor(action, dtype=torch.long) 
 
 		# Cool thing: .array(): creates 3 seperate (225) tensors
 		#			  .stack(): creates a single (3, 225) tensor
-		return torch.stack([state_b, state_w, state_e]).reshape(3, 15, 15), action, value
+		return state, action, value
+
+#### DATALOADER ####
+def prepare_dataloader(dataset: Dataset): 
+	return DataLoader(
+		dataset, 
+		batch_size=8, # SGD since AlphaGo paper says "to minimize end-to-end evaluation time" but hopefully results are not so bad even with batch 1 
+		# sampler handles the shuffling internally, good practice to not shuffle again
+			# Why data gets corrupted makes no sense --- Gemini for 
+		shuffle=False,
+		# Include Distributed Sampler: Ensures that samples are chunked without overlapping samples
+		sampler = DistributedSampler(dataset)
+	)
 
 #### CONVOLUTIONAL NEURAL NETWORKS #### 
 class U_CNN(nn.Module): 
@@ -153,7 +169,7 @@ class U_TRAIN():
 	Realize during training for selfplay the value is only either -1 or 1, and that is how we update it
 	"""
 
-	def __init__(self, model, lr, gamma, policy_criterion, value_criterion, optimizer, gpu_id, train_loader, valid_loader=None): 
+	def __init__(self, model, lr, gamma, policy_criterion, value_criterion, optimizer, gpu_id, train_loader=None, valid_loader=None): 
 		"""
 		Initializes the class
 		Args: 

@@ -198,7 +198,7 @@ def organize_games(root, transform=True):
 		pickle.dump(game_list[int(len(game_list) * (4/5)):], f)
 
 #### DATASET #####
-class GameDataset(Dataset): 
+class S_GameDataset(Dataset): 
 	"""
 	Create class for Game Data: 
 		Wrap into torch object and split into train and validation groups
@@ -243,7 +243,7 @@ class GameDataset(Dataset):
 		return torch.stack([state_b, state_w, state_e]).reshape(3, 15, 15), action
 
 #### DATALOADER ####
-def prepare_dataloader(dataset: Dataset): 
+def s_prepare_dataloader(dataset: Dataset): 
 	return DataLoader(
 		dataset, 
 		batch_size=32, 

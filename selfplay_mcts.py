@@ -47,7 +47,7 @@ class ActionNode:
 	"""
 	def __init__(self, 
 			parent: 'ActionNode'=None, 
-			action: tuple[int, int]=None, 
+			action: tuple[torch.long, torch.long]=None, 
 			val: torch.float32=None,
 			prob: torch.float32=None, 
 			new_state: torch.Tensor=None, 
@@ -81,7 +81,7 @@ class ActionNode:
 		# .clone() for pytorch tensors
 		temp_new_s = state.clone()
 		temp_new_s[color, action[0], action[1]] = 1 
-		temp_new_s[(color + 1)%2, action[0], action[1]] = 0
+		temp_new_s[2, action[0], action[1]] = 0
 		return temp_new_s
 			
 	def get_bestchild(self): 
@@ -132,9 +132,9 @@ class ActionNode:
 
 	def terminal(self): 
 		"""Returns if the game has come to an end""" 
-		return self.check_winner() or self.no_moves_left()
+		return self.is_winner() or self.no_moves_left()
 	
-	def check_winner(self): 
+	def is_winner(self): 
 		"""
 		Checks if there is a winner in the game based on the current state, new_s, 
 		by checking for a 5 in a row in the four possible configurations we can find it in
@@ -142,18 +142,18 @@ class ActionNode:
 			boolean: True if there is winner, False if there is no winner
 		"""
 		# Edge case for root node without action
-		if self.action == None: 
+		if self.a == None: 
 			return None
 		dirs = ((1, 0), (0, 1), (1, 1), (1, -1))
 		color = self.color
 
 		for dir in dirs: 
-			winningCells = [[self.action[0], self.action[1]]]
+			winningCells = [[self.a[0], self.a[1]]]
 			for sgn in (1, -1): 
 				rowStep = dir[0]
 				colStep = dir[1]
-				curRow = self.action[0] + rowStep * sgn
-				curCol = self.action[1] + colStep * sgn
+				curRow = self.a[0] + rowStep * sgn
+				curCol = self.a[1] + colStep * sgn
 				if (curRow >= 15 or curRow < 0) or (curCol >= 15 or curCol < 0):
 					continue
 				while self.new_s[color, curRow, curCol] == 1: 
@@ -178,10 +178,16 @@ class ActionNode:
 		empty_state = self.new_s[2]
 		return torch.all(empty_state == 0)
 
-def mcts_search(root_state: torch.Tensor, color: int, simulations=1600):
-	# Load the trained weights and set to eval
-	model = load_and_eval(CNN().to(device))
-
+def mcts_search(model, root_state: torch.Tensor, color: int, simulations=1600):
+	"""
+	Does the custom MCTS search, rollouts are replaced with policies 
+	Args: 
+		model: Specific model that handles policy and value out to select moves 
+		root_state: Initial board state for our search 
+		simulations: Number of simulations before we select child
+	Return: 
+		selected_child: Child that was selected from the distribution 
+	"""
 	# Call CNN on root to get probs and val 
 	probs, val = model(root_state)
 
@@ -222,9 +228,7 @@ def mcts_search(root_state: torch.Tensor, color: int, simulations=1600):
 	# Select a child from a distribution 
 	child_index = select_child(generate_distribution(root.children))
 	selected_child = root.children[child_index]
-
-	# Save this state for training
-	save_training_sample(root, selected_child, root.val)
+	select_child_action = (select_child.a[0] * 15) + select_child.a[1]
 
 	# Return the child 
 	return selected_child
@@ -297,10 +301,3 @@ def terminal_routine(node):
 	and back prop
 	""" 
 	node.backpropogate()
-
-def save_training_sample(root, root_action, root_val): 
-	"""
-	Saves the sample for training inside a file. 
-	"""
-	with open("game_state")
-	return 
