@@ -131,7 +131,8 @@ def load_supervised_weights(rank):
 			No need to change anything for value_network since that is not part of the S_CNN
 	"""
 	# Note: No .to(device), this I moved to training class initialization
-	model = U_CNN()
+	# DDP_CHANGED : to.device('cpu') 
+	model = U_CNN().to('cpu')
 	if rank: 
 		supervised_state = torch.load('supervised_weights.pth', weights_only=True)
 	else: 
