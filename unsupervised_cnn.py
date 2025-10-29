@@ -83,13 +83,13 @@ class U_GameDataset(Dataset):
 		return state, action, value
 
 #### DATALOADER ####
-def u_prepare_dataloader(dataset: Dataset): 
+def u_prepare_dataloader(dataset: Dataset, rank: int): 
 	return DataLoader(
-		dataset, 
+		dataset,
 		batch_size=8, # SGD since AlphaGo paper says "to minimize end-to-end evaluation time" but hopefully results are not so bad even with batch 1 
 		# sampler handles the shuffling internally, good practice to not shuffle again
 			# Why data gets corrupted makes no sense --- Gemini for 
-		shuffle=False,
+		shuffle=False
 		# Include Distributed Sampler: Ensures that samples are chunked without overlapping samples
 		# DDP_CHANGED
 		# sampler = DistributedSampler(dataset)
@@ -249,6 +249,7 @@ class U_TRAIN():
 			}
 		i = 0 
 		for epoch in tqdm(range(n_epochs)): 
+			print(f"[GPU{self.gpu_id}] Epoch {epoch} | Batchsize: {self.train_loader.batch_size} | Steps: {len(self.train_loader)}")
 			print(f"[GPU{self.gpu_id}] Epoch {epoch} | Batchsize: {self.train_loader.batch_size} | Steps: {len(self.train_loader)}")
 			# Sets the model to training mode: part of nn.Module
 			#		We get the perks of automatic 1) dropout 2) batchnormalization, talked about in class but lowkey forget 

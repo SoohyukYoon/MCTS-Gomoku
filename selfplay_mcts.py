@@ -197,6 +197,7 @@ def mcts_search(model, root_state: torch.Tensor, color: int, simulations=1600):
 
 	# Run by default 1600 simulations to decide which child to select
 	for s in range(simulations): 
+	for s in range(simulations): 
 		node = root 
 
 		# Get the leaf child

@@ -80,11 +80,13 @@ def unsupervised_train(total_epochs: int, total_games: int, rank: int=None, worl
 
 #### HELPERS FUNCTIONS FOR UNSUPERVISED TRAINING ####
 def append_value(game_list, winner): 
+def append_value(game_list, winner): 
 	"""
 	Appends the winner into each game move 
 	Args: 
 		game_list: list of moves played in the game
 	"""
+	value = 1 if winner != -1 else 0
 	value = 1 if winner != -1 else 0
 	for i in range(len(game_list)): 
 		game_list[i].append(value)
@@ -171,7 +173,7 @@ def create_train_instance(rank, model):
 				optimizer=torch.optim.Adam(model.parameters(), lr=0.0001)
 			)	
 
-def selfplay_mcts(train: U_TRAIN=None, total_games: int=10000): 
+def selfplay_mcts(train: U_TRAIN=None, total_games: int=10000, rank: int=None): 
 	"""
 	The meat of where self play from MCTS occurs
 	Args: 
@@ -209,14 +211,11 @@ def selfplay_mcts(train: U_TRAIN=None, total_games: int=10000):
 			game_list.append([state, child.a])
 			if child.is_winner(): 
 				break 
-
-		# Append value to each move 
-		append_value(game_list, winner) 
 		
 		# Set the model to train
 		train.model.train()
 		# Update the dataloader to refresh with new U_MoveDataset
-		train.train_loader = u_prepare_dataloader(game_list)
+		train.train_loader = u_prepare_dataloader(game_list, rank)
 		
 		# From the moves played in the game train the model 
 		history = train.train(n_epochs=10)
@@ -251,7 +250,7 @@ if __name__ == "__main__":
 		2) when creating U_CNN I also need to use ddp since that's going to be training
 	"""
 	unsupervised_epochs = 10 
-	total_games = 10 
+	total_games = 1
 	if world_size != 0: 
 		mp.spawn(unsupervised_train, args=(world_size, unsupervised_epochs), nprocs=world_size)
 	else: 

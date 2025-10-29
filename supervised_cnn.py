@@ -250,7 +250,8 @@ def s_prepare_dataloader(dataset: Dataset):
 			# Why data gets corrupted makes no sense --- Gemini for 
 		shuffle=False,
 		# Include Distributed Sampler: Ensures that samples are chunked without overlapping samples
-		sampler = DistributedSampler(dataset)
+		# DDP_CHANGED
+		# sampler = DistributedSampler(dataset)
 	)
 
 #### CONVOLUTIONAL NEURAL NETWORKS BABY #### 
