@@ -430,7 +430,7 @@ class S_TRAIN():
 			i += 1 
 		return history
 	
-def plot_train_loss(history): 
+def plot_train_loss(history: list[float]): 
 	"""
 	Plots the training loss 
 	Args: 
@@ -449,7 +449,7 @@ def plot_train_loss(history):
 	fig.tight_layout() # shows the labels I've defined
 	return fig, ax
 
-def plot_train_acc(history): 
+def plot_train_acc(history: list[float]): 
 	"""
 	Plots the training loss 
 	Args: 

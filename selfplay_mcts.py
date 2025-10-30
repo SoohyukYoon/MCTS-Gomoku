@@ -100,7 +100,7 @@ class ActionNode:
 		"""
 		for i, p in enumerate(self.child_Ps):
 			curr_state = self.new_s
-			action = [i // 15, i % 5]
+			action = [i // 15, i % 15]
 			next_color = (self.color + 1) % 2
 			new_state = self.update_state(curr_state, action, next_color)
 
@@ -138,8 +138,9 @@ class ActionNode:
 			boolean: True if there is winner, False if there is no winner
 		"""
 		# Edge case for root node without action
-		if self.a == None: 
+		if not self.a: 
 			return None
+
 		dirs = ((1, 0), (0, 1), (1, 1), (1, -1))
 		color = self.color
 
@@ -154,11 +155,11 @@ class ActionNode:
 					continue
 				while self.new_s[color, curRow, curCol] == 1: 
 					winningCells.append([curRow, curCol])
-					if len(winningCells) > 4: 
+					if len(winningCells) > 5: 
 						return None
 					curRow += rowStep * sgn
 					curCol += colStep * sgn
-					if (curRow >= 7 or curRow < 0) or (curCol >= 7 or curCol < 0): 
+					if (curRow >= 15 or curRow < 0) or (curCol >= 15 or curCol < 0): 
 						break 
 			if len(winningCells) == 5: 
 				return True
@@ -187,7 +188,7 @@ def mcts_search(model, root_state: torch.Tensor, color: int, simulations=1600):
 	# Call CNN on root to get probs and val 
 	probs, val = model(root_state)
 	val = val.item()
-	probs = probs.tolist()[0]
+	probs = get_legal_probs(probs.tolist()[0], root_state)
 
 	# Covers both cases: Empty game or middle of game
 	root = ActionNode(val=val, color=color, child_Ps=probs, new_state=root_state)
@@ -197,7 +198,6 @@ def mcts_search(model, root_state: torch.Tensor, color: int, simulations=1600):
 
 	# Run by default 1600 simulations to decide which child to select
 	for s in range(simulations): 
-	for s in range(simulations): 
 		node = root 
 
 		# Get the leaf child
@@ -206,25 +206,23 @@ def mcts_search(model, root_state: torch.Tensor, color: int, simulations=1600):
 		
 		# Expand from leaf node 
 		if node.terminal():
-			terminal_routine(node)
+			terminal_routine(node, model)
 			continue
 		elif not node.child_Ps: 
-			probs, val = model(node.new_s)
-			node.v = val.item()
-			node.child_Ps = probs.tolist()[0]
-			node.backpropogate()
-			node.expand()
+			new_best_child_routine(node, model)
 		else: 
 			node.expand()
 
 		# Select best child from this expansion 
 		best_child = node.get_bestchild() 
+			
 		
 		# Call CNN on the bestchild and update its parameters
 		probs, val = model(best_child.new_s)
+		probs = get_legal_probs(probs.tolist()[0], best_child.new_s)
+		best_child.child_Ps = probs
 		best_child.v = val.item()
-		best_child.child_Ps = probs.tolist()[0]
-
+	
 		# Backpropogate on best_child 
 		best_child.backpropogate()
 	
@@ -240,6 +238,24 @@ def load_and_eval(model):
 	model.load_state_dict(torch.load('soogo_weights.pth', map_location=torch.device('cpu'))) 
 	# Set to eval mode so that gradients don't flow back 
 	model.eval()
+
+def get_legal_probs(probs: list[float], state: torch.tensor): 
+	"""
+	Gets the legal move probabilities given board state 
+	Args: 
+		probs: Probability list generated from model 
+		state: Current board state
+	Returns: 
+		probs: Updated list of probabilities with only legal moves 
+	"""
+	# .clamp(max=number) keeps element of tensor <= number 
+	taken_board = (state[0] + state[1]).clamp(max=1)
+	for r in range(15): 
+		for c in range(15): 
+			if taken_board[r, c] == 1: 
+				# Set element to negative infinity if stone already present 
+				probs[r * 15 + c] = -float('infinity')
+	return probs
 
 def generate_distribution(children): 
 	"""
@@ -298,9 +314,29 @@ def select_child(dist):
 			return m 
 	return r 
 
-def terminal_routine(node):
+def terminal_routine(node, model):
 	"""
 	If node is the terminal node do not expand 
 	and back prop
+	Args: 
+		node: Node we are backpropping from 
+		mode: Model for executing policy and value operations
 	""" 
+	probs, val = model(node.new_s)
+	node.v = val.item()
 	node.backpropogate()
+
+def new_best_child_routine(node, model): 
+	"""
+	
+	Routine for when we have found a new best child 
+	Args: 
+		node: Node we are backpropping from 
+		mode: Model for executing policy and value operations
+	""" 
+	probs, val = model(node.new_s)
+	probs = get_legal_probs(probs.tolist()[0], node.new_s)
+	node.child_Ps = probs
+	node.v = val.item()
+	node.backpropogate()
+	node.expand()

@@ -223,7 +223,7 @@ class U_TRAIN():
 		correct = 0 
 		data_loader = self.valid_loader if not train_loader else self.train_loader
 		with torch.no_grad(): 
-			for states, actions in tqdm(data_loader): 
+			for states, actions, values in tqdm(data_loader): 
 				states, actions = states.to(self.gpu_id), actions.to(self.gpu_id)
 				policies, value = model(states)
 				# argmax at dim=1, which is 225, select one of 225
@@ -248,8 +248,7 @@ class U_TRAIN():
 				'train_acc': []
 			}
 		i = 0 
-		for epoch in tqdm(range(n_epochs)): 
-			print(f"[GPU{self.gpu_id}] Epoch {epoch} | Batchsize: {self.train_loader.batch_size} | Steps: {len(self.train_loader)}")
+		for epoch in (range(n_epochs)): 
 			print(f"[GPU{self.gpu_id}] Epoch {epoch} | Batchsize: {self.train_loader.batch_size} | Steps: {len(self.train_loader)}")
 			# Sets the model to training mode: part of nn.Module
 			#		We get the perks of automatic 1) dropout 2) batchnormalization, talked about in class but lowkey forget 
@@ -261,17 +260,17 @@ class U_TRAIN():
 			total_loss = 0 
 			# After each epoch train_loader is reshuffled
 			for states, actions, values in self.train_loader: 
-				print(type(actions))
 				# 0. Prepare data by moving it to GPU
-				states, actions, values = states.to(self.gpu_id), actions.to(self.gpu_id), values.to(self.gpu_id)
+				# Changed value from (5) to (5, 1, 1, 1) to keep loss.py happy
+				states, actions, values = states.to(self.gpu_id), actions.to(self.gpu_id), values.view(-1, 1, 1, 1).to(self.gpu_id)
 				# 1. Clear previous Gradient, we don't want old gradient contributing again
 				self.optimizer.zero_grad()
 				# 2. Forward pass the states
 				# DDP_CHANGED
-				out_policies, out_values = self.model(states)
+				out_actions, out_values = self.model(states)
 				# 3. Calculate the loss
 				#	actions does not need to be an indicator matrix, in torch merely providing the index is enough
-				loss_policy = self.policy_criterion(out_policies, actions)
+				loss_policy = self.policy_criterion(out_actions, actions)
 				loss_value = self.value_criterion(out_values, values)
 				total_loss = loss_policy + loss_value
 				# 4. Calculate all the Gradients, pytorch just does all this, it's like...magic
@@ -286,9 +285,9 @@ class U_TRAIN():
 			history['train_loss'].append(total_loss.item() / max(1, len(self.train_loader)))
 			# acc_v = evaluate(model, valid_loader)
 			use_train_loader = True 
-			acc_t = self.evaluate(self.model, use_train_loader)
+			# acc_t = self.evaluate(self.model, use_train_loader)
 			# print(f"Epoch {epoch}, Valid Accuracy {acc_v * 100:.2f}%")
-			history['train_acc'].append(acc_t)
+			# history['train_acc'].append(acc_t)
 			# print(f"Epoch {epoch}, Training Accuracy {acc_t * 100:.2f}%")
 			i += 1 
 		return history

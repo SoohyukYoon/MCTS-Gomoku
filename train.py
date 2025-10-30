@@ -70,6 +70,7 @@ def unsupervised_train(total_epochs: int, total_games: int, rank: int=None, worl
 
 	# Print the loss graph 
 	plot_train_loss(tot_history)
+	plt.show()
 
 	# Save the trained weights -- could use pickle, but pytorch was more sigma
 	torch.save(model.state_dict(), 'unsupervised_weights.pth')
@@ -79,19 +80,6 @@ def unsupervised_train(total_epochs: int, total_games: int, rank: int=None, worl
 	print("Completed Supervised Training")
 
 #### HELPERS FUNCTIONS FOR UNSUPERVISED TRAINING ####
-def append_value(game_list, winner): 
-def append_value(game_list, winner): 
-	"""
-	Appends the winner into each game move 
-	Args: 
-		game_list: list of moves played in the game
-	"""
-	value = 1 if winner != -1 else 0
-	value = 1 if winner != -1 else 0
-	for i in range(len(game_list)): 
-		game_list[i].append(value)
-		value = -value
-
 def load_supervised_weights(rank):
 	"""
 	Loads the supervised weights into the unsupervised models 
@@ -183,7 +171,9 @@ def selfplay_mcts(train: U_TRAIN=None, total_games: int=10000, rank: int=None):
 		tot_history: Contains a list of the loss that has occured throughout slef-play training
 	"""
 	max_moves = 225
-	tot_history = []
+	tot_history = {
+		'train_loss': []
+	}
 	# Loop over the total number of games we are going to train on 
 	for g in range(total_games):
 
@@ -196,31 +186,63 @@ def selfplay_mcts(train: U_TRAIN=None, total_games: int=10000, rank: int=None):
 		state = torch.stack([state_b, state_w, state_e])
 
 		# Initialize starting color to black and winner
-		color = 0
+		color = 1
 		winner = -1
 
 		# Initialize a game list that we will feed into training
 		game_list = []
 
 		# Loop over the moves being played in game g
-		for m in tqdm(range(max_moves - 220)):
+		for m in (range(max_moves - 150)):
 			child = mcts_search(train.model, state, color, simulations=10)
-			state[color, child.a[0], child.a[1]] = 1 
+			state[child.color, child.a[0], child.a[1]] = 1 
 			state[2, child.a[0], child.a[1]] = 0 
 			color = (color + 1) % 2
-			game_list.append([state, child.a])
+			game_list.append([state, child.a[0] * 15 + child.a[1]])
+			# print(f'move: {child.a[0] + 1}, {child.a[1] + 1}')
+			print_game(state)
 			if child.is_winner(): 
+				print("game ended winner is: ", child.color)
 				break 
+			print()
 		
+		# Append values to the list
+		append_value(game_list, winner)
+
 		# Set the model to train
 		train.model.train()
 		# Update the dataloader to refresh with new U_MoveDataset
-		train.train_loader = u_prepare_dataloader(game_list, rank)
+		train.train_loader = u_prepare_dataloader(U_GameDataset(game_list), rank)
 		
 		# From the moves played in the game train the model 
 		history = train.train(n_epochs=10)
-		tot_history.extend(history['train_loss'])
+		tot_history['train_loss'].extend(history['train_loss'])
 	return tot_history
+
+def append_value(game_list, winner): 
+	"""
+	Appends the winner into each game move 
+	Args: 
+		game_list: list of moves played in the game
+	"""
+	value = 1 if winner != -1 else 0
+	for i in range(len(game_list)): 
+		game_list[i].append(value)
+		value = -value
+
+def print_game(state: torch.tensor): 
+	for r in range(15): 
+		print(r + 1, end='  ') if r < 9 else print(r + 1, end=' ')
+		for c in range(15): 
+			if state[0, r, c] == 1: 
+				print('●', end=' ')
+			elif state[1, r, c] == 1: 
+				print('○', end=' ')
+			else: 
+				print('.', end=' ')
+		print() 
+	print('   a b c d e f g h i j k l m n o')
+	print()
 
 if __name__ == "__main__": 
 	"""
