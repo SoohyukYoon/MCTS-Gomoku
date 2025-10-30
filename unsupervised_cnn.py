@@ -89,10 +89,10 @@ def u_prepare_dataloader(dataset: Dataset, rank: int):
 		batch_size=8, # SGD since AlphaGo paper says "to minimize end-to-end evaluation time" but hopefully results are not so bad even with batch 1 
 		# sampler handles the shuffling internally, good practice to not shuffle again
 			# Why data gets corrupted makes no sense --- Gemini for 
-		shuffle=False
+		shuffle=False,
 		# Include Distributed Sampler: Ensures that samples are chunked without overlapping samples
 		# DDP_CHANGED
-		# sampler = DistributedSampler(dataset)
+		sampler = DistributedSampler(dataset)
 	)
 
 #### CONVOLUTIONAL NEURAL NETWORKS #### 
@@ -191,8 +191,7 @@ class U_TRAIN():
 			# device_ids: consists of a list of IDs the GPUs live on 
 			# Since self.model refers to the DDP wrapped object we need to add .module to access model parameters
 		# DDP_CHANGED -- 
-		# DDP(model, device_ids=[self.gpu_id]) 
-		self.model = model
+		self.model = DDP(model.to(gpu_id), device_ids=[self.gpu_id]) 
 		self.train_loader = train_loader
 		self.valid_loader = valid_loader
 		self.lr = lr 
@@ -249,7 +248,7 @@ class U_TRAIN():
 			}
 		i = 0 
 		for epoch in (range(n_epochs)): 
-			print(f"[GPU{self.gpu_id}] Epoch {epoch} | Batchsize: {self.train_loader.batch_size} | Steps: {len(self.train_loader)}")
+			# print(f"[GPU{self.gpu_id}] Epoch {epoch} | Batchsize: {self.train_loader.batch_size} | Steps: {len(self.train_loader)}")
 			# Sets the model to training mode: part of nn.Module
 			#		We get the perks of automatic 1) dropout 2) batchnormalization, talked about in class but lowkey forget 
 			#		Note: Either way even if not call .train() it gets called by default, but necessary
