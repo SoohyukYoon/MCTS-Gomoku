@@ -9,6 +9,7 @@ from contextlib import nullcontext
 import xml.etree.ElementTree as ET
 from urllib.parse import unquote
 
+
 import math 
 import random 
 import numpy as np 
@@ -78,9 +79,8 @@ def organize_games(root, transform=True):
 		game_state_b, game_state_w, game_state_e = np.array([0] * 225), np.array([0] * 225), np.array([1] * 225)
 
 		# Get moves 
-		raw = game.find('move').text.strip().split()
+		raw = game.find('move').text.strip()
 		moves = unquote(raw).split()
-
 		# Since the game consists only of moves
 		# iterate through the game, and create the
 		# update game state per-iteration: 
@@ -195,15 +195,15 @@ def organize_games(root, transform=True):
 	print("Game List Length: ", len(game_list))
 
 	# Check data sanity
-	print("\nData sanity check:")
-	for i in range(min(5, len(game_list))):
-		state, action = game_list[i]
-		print(f"Example {i}: Action={action}, Board sum={sum(state[0]) + sum(state[1])}") # this was the culprit
+	# print("\nData sanity check:")
+	# for i in range(min(5, len(game_list))):
+	# 	state, action = game_list[i]
+	# 	print(f"Example {i}: Action={action}, Board sum={sum(state[0]) + sum(state[1])}") # this was the culprit
 		
 	# Check label distribution
 	actions = [x[1] for x in game_list]
-	print(f"Unique actions: {len(set(actions))} out of {len(actions)} total")
-	print(f"Action range: {min(actions)} to {max(actions)}")
+	# print(f"Unique actions: {len(set(actions))} out of {len(actions)} total")
+	# print(f"Action range: {min(actions)} to {max(actions)}")
 	
 	with open("dataset/training.pkl", "wb") as f: 
 		pickle.dump(game_list[:int(len(game_list) * (4/5))], f)
@@ -265,7 +265,7 @@ def s_prepare_dataloader(dataset: Dataset):
 		shuffle=False,
 		# Include Distributed Sampler: Ensures that samples are chunked without overlapping samples
 		# DDP_CHANGED
-		# sampler = DistributedSampler(dataset)
+		sampler = DistributedSampler(dataset)
 	)
 
 #### CONVOLUTIONAL NEURAL NETWORKS BABY #### 
@@ -350,7 +350,7 @@ class S_TRAIN():
 		# Wrap in DDP such that our trained model can be distributed across GPUs
 			# device_ids: consists of a list of IDs the GPUs live on 
 			# Since self.model refers to the DDP wrapped object we need to add .module to access model parameters
-		self.model = DDP(model.to(gpu_id), device_ids=[self.gpu_id])
+		self.model = DDP(model.to(f"cuda:{gpu_id}"), device_ids=[self.gpu_id])
 		self.train_loader = train_loader
 		self.valid_loader = valid_loader
 		self.lr = lr 
@@ -404,9 +404,8 @@ class S_TRAIN():
 				'train_loss': [],
 				'train_acc': []
 			}
-		i = 0 
-		for epoch in range(n_epochs): 
-			print(f"[GPU{self.gpu_id}] Epoch {epoch} | Batchsize: {self.batch_size} | Steps: {len(self.train_data)}")
+		for epoch in tqdm(range(n_epochs)): 
+			print(f"[GPU{self.gpu_id}] Epoch {epoch} | Batchsize: {self.train_loader.batch_size} | Steps: {len(self.train_loader)}")
 			# Sets the model to training mode: part of nn.Module
 			#		We get the perks of automatic 1) dropout 2) batchnormalization, talked about in class but lowkey forget 
 			#		Note: Either way even if not call .train() it gets called by default, but necessary
@@ -441,9 +440,19 @@ class S_TRAIN():
 			# print(f"Epoch {epoch}, Valid Accuracy {acc_v * 100:.2f}%")
 			# history['train_acc'].append(acc_t)
 			# print(f"Epoch {epoch}, Training Accuracy {acc_t * 100:.2f}%")
-			i += 1 
+
+			# Save updated model to a file 
+			if self.gpu_id == 0 and epoch % self.save_every == 0:
+				self.save_checkpoint(epoch)
+
 		return history
-	
+
+	def save_checkpoint(self, epoch): 	
+		ckp = self.model.module.state_dict()
+		PATH = "supervised_weights.pt"
+		torch.save(ckp, PATH)
+		print(f"Epoch {epoch} | Training checkpoint saved at {PATH}")
+
 def plot_train_loss(history: list[float]): 
 	"""
 	Plots the training loss 

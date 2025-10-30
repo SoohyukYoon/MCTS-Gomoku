@@ -20,10 +20,9 @@ def supervised_train(rank: int, world_size: int, total_epochs: int):
 	print("Beginning Supervised Training")
 	# Initialize DDP group
 	ddp_setup(rank, world_size)
-	# Organize game data: 
-	organize_games('renjunet_v10_20180803.xml')
 	# dataset, and wrap into dataloader
 	train_loader = s_prepare_dataloader(S_GameDataset(root='dataset', split='training'))
+	print("Finished loading data to trainloader")
 	# Initialize model
 	# Note: No .to(device), this I moved to training class initialization
 	model = S_CNN()
@@ -34,20 +33,19 @@ def supervised_train(rank: int, world_size: int, total_epochs: int):
 				gamma=0.9, 
 				optimizer=torch.optim.Adam(model.parameters(), 
 				lr=0.0001), 
-				gpu_id=rank
+				gpu_id=rank,
 				criterion=nn.CrossEntropyLoss(), 
 				train_loader=train_loader
 			)	
 	# Train the model 
 	history = train.train(n_epochs=10)
-	# Save the trained weights -- could u pickle, but pytorch was more sigma
-	torch.save(model.module.state_dict(), 'supervised_weights.pth')
+
 	# Destroy the process
 	destroy_process_group()
 	print("Completed Supervised Training")
 
 #### UNSUPERVISED SECTION ####
-def unsupervised_train(total_epochs: int, total_games: int, rank: int=None, world_size: int=None): 
+def unsupervised_train(rank: int=None, world_size: int=None, total_epochs: int=None, total_games: int=None): 
 	"""
 	main training routing for unsupervised learning
 	Args: 
@@ -57,26 +55,23 @@ def unsupervised_train(total_epochs: int, total_games: int, rank: int=None, worl
 	"""
 	print("Beginning Unupervised Training")
 	# Initialize DDP group
-	if rank and world_size: 
-		ddp_setup(rank, world_size)
+	ddp_setup(rank, world_size)
 
+	# Loads supervised weights into model
 	model = load_supervised_weights(rank)
 
 	# Create Training instance
 	train = create_train_instance(rank, model)
 
 	# Self play to train weights
-	tot_history = selfplay_mcts(train, total_games)
+	tot_history = selfplay_mcts(train, total_games, rank, total_epochs)
 
 	# Print the loss graph 
 	plot_train_loss(tot_history)
 	plt.show()
 
-	# Save the trained weights -- could use pickle, but pytorch was more sigma
-	torch.save(model.module.state_dict(), 'unsupervised_weights.pth')
 	# Destroy the process
-	if rank and world_size: 
-		destroy_process_group()
+	destroy_process_group()
 	print("Completed Supervised Training")
 
 #### HELPERS FUNCTIONS FOR UNSUPERVISED TRAINING ####
@@ -125,8 +120,6 @@ def load_supervised_weights(rank):
 	# device = torch.device('cpu')
 	model = U_CNN()
 	supervised_state = torch.load('supervised_weights.pth', weights_only=True)
-	# else: 
-	# 	supervised_state = torch.load('supervised_weights.pth', weights_only=True, map_location=torch.device('cpu'))
 	unsupervised_state = model.state_dict()
 
 	# you NEED to make explicit the entire key, name.number.weight_or_bias
@@ -157,10 +150,11 @@ def create_train_instance(rank, model):
 				gamma=0.9, 
 				policy_criterion=nn.CrossEntropyLoss(), 
 				value_criterion=nn.MSELoss(), 
+				gpu_id=rank,
 				optimizer=torch.optim.Adam(model.parameters(), lr=0.0001)
 			)	
 
-def selfplay_mcts(train: U_TRAIN=None, total_games: int=10000, rank: int=None): 
+def selfplay_mcts(train: U_TRAIN=None, total_games: int=10000, rank: int=None, total_epochs: int=None): 
 	"""
 	The meat of where self play from MCTS occurs
 	Args: 
@@ -193,8 +187,6 @@ def selfplay_mcts(train: U_TRAIN=None, total_games: int=10000, rank: int=None):
 
 		# Loop over the moves being played in game g
 		for m in (range(max_moves)):
-			if m > 223: 
-				print(m)
 			child = mcts_search(train.model, state, color, simulations=1)
 			state[child.color, child.a[0], child.a[1]] = 1 
 			state[2, child.a[0], child.a[1]] = 0 
@@ -204,11 +196,11 @@ def selfplay_mcts(train: U_TRAIN=None, total_games: int=10000, rank: int=None):
 			if child.is_winner(): 
 				winner = child.color
 				break 
-
-		print("game ended winner is: ", winner)
 		
-		# Print completed games
-		print_game(state)
+		# Print completed games and who won
+		if rank == 0: 
+			print("game ended winner is: ", winner)
+			print_game(state)
 
 		# Append values to the list
 		append_value(game_list, winner)
@@ -219,7 +211,7 @@ def selfplay_mcts(train: U_TRAIN=None, total_games: int=10000, rank: int=None):
 		train.train_loader = u_prepare_dataloader(U_GameDataset(game_list), rank)
 		
 		# From the moves played in the game train the model 
-		history = train.train(n_epochs=1)
+		history = train.train(n_epochs=total_epochs)
 		tot_history['train_loss'].extend(history['train_loss'])
 	return tot_history
 
@@ -266,6 +258,10 @@ if __name__ == "__main__":
 		By design mp.spawn MUST call some main function
 		By design it WILL pass rank as first arg, and args in order
 	"""
+	# Organize game data: 
+	organize_games('renjunet_v10_20180803.xml')
+	print("Finished organizing games")
+	
 	supervised_epochs = 10
 	mp.spawn(supervised_train, args=(world_size, supervised_epochs), nprocs=world_size)
 
@@ -275,13 +271,9 @@ if __name__ == "__main__":
 		1) during MCTS prob better to use CPU, but during CNN prob better to use GPU -- need to somehow fix this load issue 
 		2) when creating U_CNN I also need to use ddp since that's going to be training
 	"""
-	unsupervised_epochs = 10 
+	unsupervised_epochs = 10
 	total_games = 20
-	if world_size != 0: 
-		mp.spawn(unsupervised_train, args=(world_size, unsupervised_epochs), nprocs=world_size)
-	else: 
-		unsupervised_train(unsupervised_epochs, total_games)
-	
+	mp.spawn(unsupervised_train, args=(world_size, unsupervised_epochs, total_games), nprocs=world_size)
 	print("Training complete")
 
 

@@ -246,9 +246,9 @@ class U_TRAIN():
 				'train_loss': [],
 				'train_acc': []
 			}
-		i = 0 
+
 		for epoch in (range(n_epochs)): 
-			# print(f"[GPU{self.gpu_id}] Epoch {epoch} | Batchsize: {self.train_loader.batch_size} | Steps: {len(self.train_loader)}")
+			print(f"[GPU{self.gpu_id}] Epoch {epoch} | Batchsize: {self.train_loader.batch_size} | Steps: {len(self.train_loader)}")
 			# Sets the model to training mode: part of nn.Module
 			#		We get the perks of automatic 1) dropout 2) batchnormalization, talked about in class but lowkey forget 
 			#		Note: Either way even if not call .train() it gets called by default, but necessary
@@ -288,5 +288,15 @@ class U_TRAIN():
 			# print(f"Epoch {epoch}, Valid Accuracy {acc_v * 100:.2f}%")
 			# history['train_acc'].append(acc_t)
 			# print(f"Epoch {epoch}, Training Accuracy {acc_t * 100:.2f}%")
-			i += 1 
+
+			# Save updated model to a file 
+			if self.gpu_id == 0 and epoch % self.save_every == 0:
+				self.save_checkpoint(epoch)
+
 		return history
+
+	def save_checkpoint(self, epoch): 	
+		ckp = self.model.module.state_dict()
+		PATH = "unsupervised_weights.pt"
+		torch.save(ckp, PATH)
+		print(f"Epoch {epoch} | Training checkpoint saved at {PATH}")
