@@ -203,7 +203,7 @@ class U_TRAIN():
 		self.optimizer = optimizer 
 		# Define Scheduler: Decays every epoch 
 		# Fun fact the "step" is called step, bc the change in LR changes like a step when plotted
-		self.scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=gamma)
+		self.scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5000, gamma=gamma)
 		
 	#### Training and Validation ####
 	def evaluate(self, model, train_loader=False): 
@@ -248,7 +248,7 @@ class U_TRAIN():
 			}
 
 		for epoch in (range(n_epochs)): 
-			print(f"[GPU{self.gpu_id}] Epoch {epoch} | Batchsize: {self.train_loader.batch_size} | Steps: {len(self.train_loader)}")
+			# print(f"[GPU{self.gpu_id}] Epoch {epoch} | Batchsize: {self.train_loader.batch_size} | Steps: {len(self.train_loader)}")
 			# Sets the model to training mode: part of nn.Module
 			#		We get the perks of automatic 1) dropout 2) batchnormalization, talked about in class but lowkey forget 
 			#		Note: Either way even if not call .train() it gets called by default, but necessary
@@ -289,14 +289,14 @@ class U_TRAIN():
 			# history['train_acc'].append(acc_t)
 			# print(f"Epoch {epoch}, Training Accuracy {acc_t * 100:.2f}%")
 
-			# Save updated model to a file 
-			if self.gpu_id == 0 and epoch % 10000 == 0:
-				self.save_checkpoint(epoch)
+			# # Save updated model to a file 
+			# if self.gpu_id == 0:
+			# 	self.save_checkpoint(epoch)
 
 		return history
 
-	def save_checkpoint(self, epoch): 	
-		ckp = self.model.module.state_dict()
-		PATH = "unsupervised_weights.pt"
-		torch.save(ckp, PATH)
-		print(f"Epoch {epoch} | Training checkpoint saved at {PATH}")
+	# def save_checkpoint(self, epoch): 	
+	# 	ckp = self.model.module.state_dict()
+	# 	PATH = "unsupervised_weights.pt"
+	# 	torch.save(ckp, PATH)
+	# 	print(f"Epoch {epoch} | Training checkpoint saved at {PATH}")

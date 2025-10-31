@@ -69,12 +69,7 @@ def unsupervised_train(rank: int=None, world_size: int=None, total_epochs: int=N
 	train = create_train_instance(rank, model)
 
 	# Self play to train weights
-	tot_history = selfplay_mcts(train, total_games, rank, total_epochs)
-
-	# Print the loss graph 
-	fig, ax = plot_train_loss(tot_history)
-	if rank == 0: 
-		fig.savefig("training_curve.png")
+	selfplay_mcts(train, total_games, rank, total_epochs)
 
 	# Destroy the process
 	destroy_process_group()
@@ -125,19 +120,19 @@ def load_supervised_weights(rank):
 	# DDP_CHANGED : to.device('cpu') 
 	# device = torch.device('cpu')
 	model = U_CNN()
-	supervised_state = torch.load('supervised_weights.pth', weights_only=True)
-	unsupervised_state = model.state_dict()
+	# supervised_state = torch.load('supervised_weights.pth', weights_only=True)
+	# unsupervised_state = model.state_dict()
 
-	# you NEED to make explicit the entire key, name.number.weight_or_bias
-	for i in range(5): 
-		backbone_key = f'backbone.{i*2}.weight' # get the conv layer key, at the even index bc ReLu
-		supervised_key = f'layers.{i*2}.weight'  
-		unsupervised_state[backbone_key] = supervised_state[supervised_key]
+	# # you NEED to make explicit the entire key, name.number.weight_or_bias
+	# for i in range(5): 
+	# 	backbone_key = f'backbone.{i*2}.weight' # get the conv layer key, at the even index bc ReLu
+	# 	supervised_key = f'layers.{i*2}.weight'  
+	# 	unsupervised_state[backbone_key] = supervised_state[supervised_key]
 
-	unsupervised_state['policy_network.0.weight'] = supervised_state['layers.10.weight']
+	# unsupervised_state['policy_network.0.weight'] = supervised_state['layers.10.weight']
 
-	# Load the modified state dict of U_CNN 
-	model.load_state_dict(unsupervised_state)
+	# # Load the modified state dict of U_CNN 
+	# model.load_state_dict(unsupervised_state)
 
 	return model 
 
@@ -153,7 +148,7 @@ def create_train_instance(rank, model):
 	return U_TRAIN(
 				model, 
 				lr=0.0001, 
-				gamma=0.9, 
+				gamma=0.999, 
 				policy_criterion=nn.CrossEntropyLoss(), 
 				value_criterion=nn.MSELoss(), 
 				gpu_id=rank,
@@ -169,13 +164,19 @@ def selfplay_mcts(train: U_TRAIN=None, total_games: int=10000, rank: int=None, t
 	Return: 
 		tot_history: Contains a list of the loss that has occured throughout slef-play training
 	"""
+	print("Beginning self play")
 	max_moves = 225
 	tot_history = {
 		'train_loss': []
 	}
+
+	# Initialize a game list that we will feed into training
+	game_list = []
+
 	# Loop over the total number of games we are going to train on 
 	for g in range(total_games):
-
+		if rank == 0: 
+			print("Current game: ", g)
 		# Set the model to eval to prevent gradients flowing back
 		train.model.eval()
 		# Initialize an empty board
@@ -188,8 +189,8 @@ def selfplay_mcts(train: U_TRAIN=None, total_games: int=10000, rank: int=None, t
 		color = 1
 		winner = -1
 
-		# Initialize a game list that we will feed into training
-		game_list = []
+		# Initialize game moves that we will extend into game list
+		game_moves = [] 
 
 		# Loop over the moves being played in game g
 		for m in (range(max_moves)):
@@ -197,19 +198,22 @@ def selfplay_mcts(train: U_TRAIN=None, total_games: int=10000, rank: int=None, t
 			state[child.color, child.a[0], child.a[1]] = 1 
 			state[2, child.a[0], child.a[1]] = 0 
 			color = (color + 1) % 2
-			game_list.append([state, child.a[0] * 15 + child.a[1]])
+			game_moves.append([state, child.a[0] * 15 + child.a[1]])
 			# print(f'move: {child.a[0] + 1}, {child.a[1] + 1}')
 			if child.is_winner(): 
 				winner = child.color
 				break 
 		
 		# Print completed games and who won
-		if rank == 0: 
-			print("game ended winner is: ", winner)
-			print_game(state)
+		#if rank == 0: 
+			#print("game ended winner is: ", winner)
+			#print_game(state)
 
 		# Append values to the list
-		append_value(game_list, winner)
+		append_value(game_moves, winner)
+
+		# Add game_moves to game_list
+		add_game_moves(game_list, game_moves)
 
 		# Set the model to train
 		train.model.train()
@@ -217,9 +221,33 @@ def selfplay_mcts(train: U_TRAIN=None, total_games: int=10000, rank: int=None, t
 		train.train_loader = u_prepare_dataloader(U_GameDataset(game_list), rank)
 		
 		# From the moves played in the game train the model 
-		history = train.train(n_epochs=total_epochs)
+		epochs = total_epochs + (len(game_list) // 10000)
+		history = train.train(n_epochs=epochs)
 		tot_history['train_loss'].extend(history['train_loss'])
+
+		# Save weights
+		if g % 50000 == 0: 
+			save_checkpoint(train, g)
+
+		# Save loss and print game played
+		if g % 10000 == 0: 
+			print(f"Finished game: {g}")
+			print_game(state)
+			save_loss(tot_history, rank)
+
+	print("Completed self play")
 	return tot_history
+
+def save_checkpoint(train, game_count): 	
+	ckp = train.model.module.state_dict()
+	PATH = "unsupervised_weights.pt"
+	torch.save(ckp, PATH)
+	print(f"Epoch {game_count} | Training checkpoint saved at {PATH}")
+
+def save_loss(history, rank): 
+	fig, ax = plot_train_loss(history)
+	if rank == 0: 
+		fig.savefig("training_curve.png")
 
 def append_value(game_list, winner): 
 	"""
@@ -231,6 +259,13 @@ def append_value(game_list, winner):
 	for i in range(len(game_list)): 
 		game_list[i].append(value)
 		value = -value
+
+def add_game_moves(game_list, game_moves): 
+	max_states = 50000
+	if len(game_moves) + len(game_list) > max_states: 
+		num_moves_to_remove = (len(game_moves) + len(game_list)) - max_states
+		del game_list[:num_moves_to_remove]
+	game_list.extend(game_moves)
 
 def print_game(state: torch.tensor): 
 	for r in range(15): 
@@ -265,11 +300,11 @@ if __name__ == "__main__":
 		By design it WILL pass rank as first arg, and args in order
 	"""
 	# Organize game data: 
-	organize_games('renjunet_v10_20180803.xml')
-	print("Finished organizing games")
+	# organize_games('renjunet_v10_20180803.xml')
+	# print("Finished organizing games")
 	
-	supervised_epochs = 10
-	mp.spawn(supervised_train, args=(world_size, supervised_epochs), nprocs=world_size)
+	# supervised_epochs = 10
+	# mp.spawn(supervised_train, args=(world_size, supervised_epochs), nprocs=world_size)
 
 	#### UNSUPERVISED SECTION ####
 	"""
@@ -277,9 +312,9 @@ if __name__ == "__main__":
 		1) during MCTS prob better to use CPU, but during CNN prob better to use GPU -- need to somehow fix this load issue 
 		2) when creating U_CNN I also need to use ddp since that's going to be training
 	"""
-	# unsupervised_epochs = 1
-	# total_games = 100000
-	# mp.spawn(unsupervised_train, args=(world_size, unsupervised_epochs, total_games), nprocs=world_size)
+	unsupervised_epochs = 1
+	total_games = 1000000
+	mp.spawn(unsupervised_train, args=(world_size, unsupervised_epochs, total_games), nprocs=world_size)
 	print("Training complete")
 
 
