@@ -21,6 +21,7 @@ from tqdm import tqdm
 
 # Used to plot loss graphs
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure 
 
 # Torch shit -- most from 444
 import torch  
@@ -73,7 +74,9 @@ def organize_games(root, transform=True):
 	game_list = []
 
 	# Iterate through each game:
-	for game in tqdm(root.findall('game')): 
+	for game in tqdm(root.findall('game')):
+		if game_count > 1000: 
+			break
 		game_count += 1 
 		# Initialize the features   
 		game_state_b, game_state_w, game_state_e = np.array([0] * 225), np.array([0] * 225), np.array([1] * 225)
@@ -106,80 +109,69 @@ def organize_games(root, transform=True):
 			game_state_w_copy = game_state_w.copy()
 			game_state_e_copy = game_state_e.copy()
 
-			# a) check for 0 rotation --- 
-			combined = list(game_state_b_copy) + list(game_state_w_copy) + list(game_state_e_copy)
-			state_action = (hash(tuple(combined)), next_move)
-			if state_action not in game_set: 
-				# Set it to hash to compress to single integer, faster processing during training
-				# Must make to tuple since lists are mutable, so need to make to immutable for set
-				game_set.add(state_action)
-				game_list.append(([game_state_b_copy, game_state_w_copy, game_state_e_copy], next_move))
-			else: 
-				states_erased_count += 1 
+			for j in range(2): 
+				if j ==1: 
+					flip = True
+					game_state_b_copy = np.flipud(game_state_b_copy.reshape(15, 15)).flatten()
+					game_state_w_copy = np.flipud(game_state_w_copy.reshape(15, 15)).flatten()
+					game_state_e_copy = np.flipud(game_state_e_copy.reshape(15, 15)).flatten()
+					next_move = (14 - next_move // 15) * 15 + (next_move % 15)
 
-			# for j in range(2): 
-			# 	if j ==1: 
-			# 		flip = True
-			# 		game_state_b_copy = np.flipud(game_state_b_copy.reshape(15, 15)).flatten()
-			# 		game_state_w_copy = np.flipud(game_state_w_copy.reshape(15, 15)).flatten()
-			# 		game_state_e_copy = np.flipud(game_state_e_copy.reshape(15, 15)).flatten()
-			# 		next_move = (14 - next_move // 15) * 15 + (next_move % 15)
+				# a) check for 0 rotation --- 
+				combined = list(game_state_b_copy) + list(game_state_w_copy) + list(game_state_e_copy)
+				state_action = (hash(tuple(combined)), next_move)
+				if state_action not in game_set: 
+					# Set it to hash to compress to single integer, faster processing during training
+					# Must make to tuple since lists are mutable, so need to make to immutable for set
+					game_set.add(state_action)
+					game_list.append(([game_state_b_copy, game_state_w_copy, game_state_e_copy], next_move))
+				else: 
+					states_erased_count += 1 
 
-			# 	# a) check for 0 rotation --- 
-			# 	combined = list(game_state_b_copy) + list(game_state_w_copy) + list(game_state_e_copy)
-			# 	state_action = (hash(tuple(combined)), next_move)
-			# 	if state_action not in game_set: 
-			# 		# Set it to hash to compress to single integer, faster processing during training
-			# 		# Must make to tuple since lists are mutable, so need to make to immutable for set
-			# 		game_set.add(state_action)
-			# 		game_list.append(([game_state_b_copy, game_state_w_copy, game_state_e_copy], next_move))
-			# 	else: 
-			# 		states_erased_count += 1 
+				# b) check for 90 rotation
+				game_state_b_90 = np.rot90(game_state_b_copy.reshape(15, 15)).flatten() 
+				game_state_w_90 = np.rot90(game_state_w_copy.reshape(15, 15)).flatten() 
+				game_state_e_90 = np.rot90(game_state_e_copy.reshape(15, 15)).flatten()  
+				combined = list(game_state_b_90) + list(game_state_w_90) + list(game_state_e_90)
+				next_move_90 = (next_move // 15) + (14 - (next_move % 15)) * 15
+				state_action = (hash(tuple(combined)), next_move_90)
+				if state_action not in game_set: 
+					# Set it to hash to compress to single integer, faster processing during training
+					# Must make to tuple since lists are mutable, so need to make to immutable for set
+					game_set.add(state_action)
+					game_list.append(([game_state_b_90, game_state_w_90, game_state_e_90], next_move_90))
+				else: 
+					states_erased_count += 1 
 
-			# 	# b) check for 90 rotation
-			# 	game_state_b_90 = np.rot90(game_state_b_copy.reshape(15, 15)).flatten() 
-			# 	game_state_w_90 = np.rot90(game_state_w_copy.reshape(15, 15)).flatten() 
-			# 	game_state_e_90 = np.rot90(game_state_e_copy.reshape(15, 15)).flatten()  
-			# 	combined = list(game_state_b_90) + list(game_state_w_90) + list(game_state_e_90)
-			# 	next_move_90 = (next_move // 15) + (14 - (next_move % 15)) * 15
-			# 	state_action = (hash(tuple(combined)), next_move_90)
-			# 	if state_action not in game_set: 
-			# 		# Set it to hash to compress to single integer, faster processing during training
-			# 		# Must make to tuple since lists are mutable, so need to make to immutable for set
-			# 		game_set.add(state_action)
-			# 		game_list.append(([game_state_b_90, game_state_w_90, game_state_e_90], next_move_90))
-			# 	else: 
-			# 		states_erased_count += 1 
+				# c) check for 180 rotation
+				game_state_b_180 = np.rot90(game_state_b_90.reshape(15, 15)).flatten() 
+				game_state_w_180 = np.rot90(game_state_w_90.reshape(15, 15)).flatten() 
+				game_state_e_180 = np.rot90(game_state_e_90.reshape(15, 15)).flatten() 
+				next_move_180 = (next_move_90 // 15) + (14 - (next_move_90 % 15)) * 15
+				combined = list(game_state_b_180) + list(game_state_w_180) + list(game_state_e_180)
+				state_action = (hash(tuple(combined)), next_move_180)
+				if state_action not in game_set: 
+					# Set it to hash to compress to single integer, faster processing during training
+					# Must make to tuple since lists are mutable, so need to make to immutable for set
+					game_set.add(state_action)
+					game_list.append(([game_state_b_180, game_state_w_180, game_state_e_180], next_move_180))
+				else: 
+					states_erased_count += 1 
 
-			# 	# c) check for 180 rotation
-			# 	game_state_b_180 = np.rot90(game_state_b_90.reshape(15, 15)).flatten() 
-			# 	game_state_w_180 = np.rot90(game_state_w_90.reshape(15, 15)).flatten() 
-			# 	game_state_e_180 = np.rot90(game_state_e_90.reshape(15, 15)).flatten() 
-			# 	next_move_180 = (next_move_90 // 15) + (14 - (next_move_90 % 15)) * 15
-			# 	combined = list(game_state_b_180) + list(game_state_w_180) + list(game_state_e_180)
-			# 	state_action = (hash(tuple(combined)), next_move_180)
-			# 	if state_action not in game_set: 
-			# 		# Set it to hash to compress to single integer, faster processing during training
-			# 		# Must make to tuple since lists are mutable, so need to make to immutable for set
-			# 		game_set.add(state_action)
-			# 		game_list.append(([game_state_b_180, game_state_w_180, game_state_e_180], next_move_180))
-			# 	else: 
-			# 		states_erased_count += 1 
-
-			# 	# d) check for 270 rotation 
-			# 	game_state_b_270 = np.rot90(game_state_b_180.reshape(15, 15)).flatten() 
-			# 	game_state_w_270 = np.rot90(game_state_w_180.reshape(15, 15)).flatten() 
-			# 	game_state_e_270 = np.rot90(game_state_e_180.reshape(15, 15)).flatten() 
-			# 	next_move_270 = (next_move_180 // 15) + (14 - (next_move_180 % 15)) * 15
-			# 	combined = list(game_state_b_270) + list(game_state_w_270) + list(game_state_e_270)
-			# 	state_action = (hash(tuple(combined)), next_move_270)
-			# 	if state_action not in game_set: 
-			# 		# Set it to hash to compress to single integer, faster processing during training
-			# 		# Must make to tuple since lists are mutable, so need to make to immutable for set
-			# 		game_set.add(state_action)
-			# 		game_list.append(([game_state_b_270, game_state_w_270, game_state_e_270], next_move_270))
-			# 	else: 
-			# 		states_erased_count += 1 
+				# d) check for 270 rotation 
+				game_state_b_270 = np.rot90(game_state_b_180.reshape(15, 15)).flatten() 
+				game_state_w_270 = np.rot90(game_state_w_180.reshape(15, 15)).flatten() 
+				game_state_e_270 = np.rot90(game_state_e_180.reshape(15, 15)).flatten() 
+				next_move_270 = (next_move_180 // 15) + (14 - (next_move_180 % 15)) * 15
+				combined = list(game_state_b_270) + list(game_state_w_270) + list(game_state_e_270)
+				state_action = (hash(tuple(combined)), next_move_270)
+				if state_action not in game_set: 
+					# Set it to hash to compress to single integer, faster processing during training
+					# Must make to tuple since lists are mutable, so need to make to immutable for set
+					game_set.add(state_action)
+					game_list.append(([game_state_b_270, game_state_w_270, game_state_e_270], next_move_270))
+				else: 
+					states_erased_count += 1 
 
 	# Print input data
 	print(game_count)
@@ -278,15 +270,16 @@ class S_CNN(nn.Module):
 	Wrap the CNN in the torch nn module to inherit the module properties
 	"""
 
-	def __init__(self, channels=128, layers=6): 
+	def __init__(self, channels=128, layers=5): 
 		"""
 		Initializes the CNN class with our layered routing
 		Initializes the parent module, nn.Module
 		"""
 		# Calls the parent class, nn.Module for initialization 
 		super().__init__()
+		self.layers = layers
 
-		self.layers = nn.Sequential(
+		self.backbone = nn.Sequential(
 				# Layer 1: 5x5 Kernel
 				nn.Conv2d(3, channels, 5, 1, 2, bias=False),
 				nn.ReLU(),
@@ -297,17 +290,21 @@ class S_CNN(nn.Module):
 
 				# Layer 3: 3x3 Kernel 
 				nn.Conv2d(channels, channels, 3, 1, 1, bias=False),
-				nn.ReLU(),
+				nn.ReLU()
+		)
 
-				# Layer 4: 3x3 Kernel 
+		self.two_more_layers = nn.Sequential(
+				# Additional layer 1: 3x3 Kernel 
 				nn.Conv2d(channels, channels, 3, 1, 1, bias=False),
 				nn.ReLU(),
 
-				# Layer 5: 3x3 Kernel 
+				# Additional layer 2: 3x3 Kernel 
 				nn.Conv2d(channels, channels, 3, 1, 1, bias=False),
-				nn.ReLU(),
+				nn.ReLU()
+		)
 
-				# Layer 6: 1x1 Kernel 
+		self.head = nn.Sequential(
+				# 1x1 Kernel 
 				nn.Conv2d(channels, 1, 1, 1, 0, bias=False),
 
 				# Flatten: Must do because CrossEntropy requires a single vector
@@ -323,7 +320,12 @@ class S_CNN(nn.Module):
 		Returns: 
 			output (Tensor): The output tensor of shape (N, 225)
 		"""
-		x = self.layers(x) 
+		x = self.backbone(x) 
+		i = 3
+		while self.layers > i: 
+			x = self.two_more_layers(x)
+			i += 2 
+		x = self.head(x)
 		return x 
 
 #### TRAINING AND EVALUATION ####
@@ -404,7 +406,8 @@ class S_TRAIN():
 				'train_loss': [],
 				'train_acc': []
 			}
-		for epoch in tqdm(range(n_epochs)): 
+		for epoch in (range(n_epochs)): 
+			print()
 			print(f"[GPU{self.gpu_id}] Epoch {epoch} | Batchsize: {self.train_loader.batch_size} | Steps: {len(self.train_loader)}")
 			# Sets the model to training mode: part of nn.Module
 			#		We get the perks of automatic 1) dropout 2) batchnormalization, talked about in class but lowkey forget 
@@ -435,21 +438,21 @@ class S_TRAIN():
 			# 7. Append training loss to plot dictionary
 			history['train_loss'].append(total_loss.item() / max(1, len(self.train_loader)))
 			# acc_v = evaluate(model, valid_loader)
-			use_train_loader = True 
+			# use_train_loader = True 
 			# acc_t = self.evaluate(self.model, use_train_loader)
 			# print(f"Epoch {epoch}, Valid Accuracy {acc_v * 100:.2f}%")
 			# history['train_acc'].append(acc_t)
 			# print(f"Epoch {epoch}, Training Accuracy {acc_t * 100:.2f}%")
 
 			# Save updated model to a file 
-			if self.gpu_id == 0 and epoch % self.save_every == 0:
+			if self.gpu_id == 0:
 				self.save_checkpoint(epoch)
 
 		return history
 
 	def save_checkpoint(self, epoch): 	
 		ckp = self.model.module.state_dict()
-		PATH = "supervised_weights.pt"
+		PATH = "supervised_weights.pth"
 		torch.save(ckp, PATH)
 		print(f"Epoch {epoch} | Training checkpoint saved at {PATH}")
 

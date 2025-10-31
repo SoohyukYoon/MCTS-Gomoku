@@ -290,7 +290,7 @@ class U_TRAIN():
 			# print(f"Epoch {epoch}, Training Accuracy {acc_t * 100:.2f}%")
 
 			# Save updated model to a file 
-			if self.gpu_id == 0 and epoch % self.save_every == 0:
+			if self.gpu_id == 0 and epoch % 10000 == 0:
 				self.save_checkpoint(epoch)
 
 		return history

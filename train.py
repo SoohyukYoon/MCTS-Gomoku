@@ -25,7 +25,7 @@ def supervised_train(rank: int, world_size: int, total_epochs: int):
 	print("Finished loading data to trainloader")
 	# Initialize model
 	# Note: No .to(device), this I moved to training class initialization
-	model = S_CNN()
+	model = S_CNN(layers=5)
 	# Create Training instance
 	train = S_TRAIN(
 				model, 
@@ -39,6 +39,11 @@ def supervised_train(rank: int, world_size: int, total_epochs: int):
 			)	
 	# Train the model 
 	history = train.train(n_epochs=10)
+
+    # Print the loss graph 
+	fig, ax = plot_train_loss(history)
+	if rank == 0: 
+		fig.savefig("training_curve.png")
 
 	# Destroy the process
 	destroy_process_group()
@@ -67,8 +72,9 @@ def unsupervised_train(rank: int=None, world_size: int=None, total_epochs: int=N
 	tot_history = selfplay_mcts(train, total_games, rank, total_epochs)
 
 	# Print the loss graph 
-	plot_train_loss(tot_history)
-	plt.show()
+	fig, ax = plot_train_loss(tot_history)
+	if rank == 0: 
+		fig.savefig("training_curve.png")
 
 	# Destroy the process
 	destroy_process_group()
@@ -187,7 +193,7 @@ def selfplay_mcts(train: U_TRAIN=None, total_games: int=10000, rank: int=None, t
 
 		# Loop over the moves being played in game g
 		for m in (range(max_moves)):
-			child = mcts_search(train.model, state, color, simulations=1)
+			child = mcts_search(train.model, state, color)
 			state[child.color, child.a[0], child.a[1]] = 1 
 			state[2, child.a[0], child.a[1]] = 0 
 			color = (color + 1) % 2
@@ -271,9 +277,9 @@ if __name__ == "__main__":
 		1) during MCTS prob better to use CPU, but during CNN prob better to use GPU -- need to somehow fix this load issue 
 		2) when creating U_CNN I also need to use ddp since that's going to be training
 	"""
-	unsupervised_epochs = 10
-	total_games = 20
-	mp.spawn(unsupervised_train, args=(world_size, unsupervised_epochs, total_games), nprocs=world_size)
+	# unsupervised_epochs = 1
+	# total_games = 100000
+	# mp.spawn(unsupervised_train, args=(world_size, unsupervised_epochs, total_games), nprocs=world_size)
 	print("Training complete")
 
 
