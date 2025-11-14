@@ -85,7 +85,7 @@ def organize_games(root, transform=True):
 		raw = game.find('move').text.strip()
 		moves = unquote(raw).split()
 		# Since the game consists only of moves
-		# iterate through the game, and create the
+		# iterate through the game, and create the 
 		# update game state per-iteration: 
 		for i in range(-1, len(moves) - 1): 
 			state_count += 1 
@@ -452,7 +452,11 @@ class S_TRAIN():
 
 	def save_checkpoint(self, epoch): 	
 		ckp = self.model.module.state_dict()
-		PATH = "supervised_weights.pth"
+		import os
+		if not os.path.exists("weights"):
+			os.makedirs("weights")
+		from pathlib import Path
+		PATH = Path("weights") / "supervised_weights.pth"
 		torch.save(ckp, PATH)
 		print(f"Epoch {epoch} | Training checkpoint saved at {PATH}")
 
